@@ -12,5 +12,6 @@ func ipcAddr(uid string) string {
 }
 
 func configDir() string {
-	return filepath.Join(os.Getenv("APPDATA"), "share")
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".share-cli")
 }

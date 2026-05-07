@@ -3,7 +3,9 @@
 package paths
 
 import (
+	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 )
 
@@ -15,9 +17,20 @@ func ipcAddr(uid string) string {
 }
 
 func configDir() string {
-	if c := os.Getenv("XDG_CONFIG_HOME"); c != "" {
-		return filepath.Join(c, "share")
+	home, _ := homeDir()
+	return filepath.Join(home, ".share-cli")
+}
+
+func homeDir() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil || homeDir == "" {
+		if u, uerr := user.Current(); uerr == nil && u.HomeDir != "" {
+			homeDir = u.HomeDir
+		} else if u, uerr := user.LookupId(fmt.Sprintf("%d", os.Getuid())); uerr == nil && u.HomeDir != "" {
+			homeDir = u.HomeDir
+		} else {
+			return "", fmt.Errorf("get home dir error: %w", err)
+		}
 	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".config", "share")
+	return homeDir, nil
 }
