@@ -10,7 +10,7 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/wenjin/sharexxx/internal/proto"
+	"github.com/wjzhangq/share/internal/proto"
 )
 
 type ConnectedClient struct {

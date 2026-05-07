@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wenjin/sharexxx/internal/proto"
+	"github.com/wjzhangq/share/internal/proto"
 )
 
 func (s *Server) handleAdmin(w http.ResponseWriter, r *http.Request) {
@@ -35,7 +35,7 @@ func (s *Server) checkBasicAuth(w http.ResponseWriter, r *http.Request) bool {
 	}
 	user, pass, ok := r.BasicAuth()
 	if !ok || user != s.cfg.Admin.User || pass != s.cfg.Admin.Password {
-		w.Header().Set("WWW-Authenticate", `Basic realm="sharexxx admin"`)
+		w.Header().Set("WWW-Authenticate", `Basic realm="share admin"`)
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return false
 	}
@@ -55,10 +55,10 @@ func (s *Server) adminOverview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprintf(w, `<!DOCTYPE html><html><head><meta charset="utf-8"><title>sharexxx admin</title>
+	fmt.Fprintf(w, `<!DOCTYPE html><html><head><meta charset="utf-8"><title>share admin</title>
 <style>body{font-family:sans-serif;margin:2em}table{border-collapse:collapse}td,th{border:1px solid #ddd;padding:8px}th{background:#f5f5f5}</style>
 </head><body>
-<h1>sharexxx admin</h1>
+<h1>share admin</h1>
 <p>Online clients: %d / %d | Active shares: %d</p>
 <p><a href="/clients">View all clients</a></p>
 </body></html>`, onlineCount, len(clients), totalShares)
@@ -69,7 +69,7 @@ func (s *Server) adminClients(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	var sb strings.Builder
-	sb.WriteString(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>clients - sharexxx admin</title>
+	sb.WriteString(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>clients - share admin</title>
 <style>body{font-family:sans-serif;margin:2em}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:8px;text-align:left}th{background:#f5f5f5}.online{color:green}.offline{color:red}</style>
 </head><body><h1>Clients</h1><table><tr><th>ID</th><th>Hostname</th><th>OS/Arch</th><th>Version</th><th>Status</th><th>Shares</th></tr>`)
 
@@ -118,7 +118,7 @@ func (s *Server) adminClientDetail(w http.ResponseWriter, r *http.Request, path 
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>c%d - sharexxx admin</title>
+	sb.WriteString(fmt.Sprintf(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>c%d - share admin</title>
 <style>body{font-family:sans-serif;margin:2em}table{border-collapse:collapse;width:100%%}td,th{border:1px solid #ddd;padding:8px;text-align:left}th{background:#f5f5f5}.active{color:green}.offline{color:orange}.closed{color:red}</style>
 </head><body><h1>c%d — %s</h1>
 <p>OS: %s/%s | Version: %s</p>

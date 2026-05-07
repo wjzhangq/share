@@ -10,8 +10,8 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/wenjin/sharexxx/internal/proto"
-	"github.com/wenjin/sharexxx/internal/version"
+	"github.com/wjzhangq/share/internal/proto"
+	"github.com/wjzhangq/share/internal/version"
 )
 
 type WSClient struct {

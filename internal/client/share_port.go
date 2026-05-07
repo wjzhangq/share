@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wenjin/sharexxx/internal/client/procmon"
-	"github.com/wenjin/sharexxx/internal/proto"
+	"github.com/wjzhangq/share/internal/client/procmon"
+	"github.com/wjzhangq/share/internal/proto"
 )
 
 func (d *Daemon) sharePort(port int) proto.IPCResponse {

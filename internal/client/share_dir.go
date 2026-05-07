@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/wenjin/sharexxx/internal/proto"
+	"github.com/wjzhangq/share/internal/proto"
 )
 
 func (d *Daemon) shareDir(path string) proto.IPCResponse {

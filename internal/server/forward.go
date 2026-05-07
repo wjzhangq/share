@@ -12,7 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/wenjin/sharexxx/internal/proto"
+	"github.com/wjzhangq/share/internal/proto"
 )
 
 type pendingRequest struct {

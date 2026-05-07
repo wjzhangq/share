@@ -5,7 +5,7 @@ import (
 	"html"
 	"strings"
 
-	"github.com/wenjin/sharexxx/internal/proto"
+	"github.com/wjzhangq/share/internal/proto"
 )
 
 func renderDirListing(shareName string, entries []proto.DirEntry, truncated bool) string {

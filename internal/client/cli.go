@@ -5,11 +5,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/wenjin/sharexxx/internal/client/ipc"
-	"github.com/wenjin/sharexxx/internal/client/paths"
-	"github.com/wenjin/sharexxx/internal/client/spawn"
-	"github.com/wenjin/sharexxx/internal/proto"
-	"github.com/wenjin/sharexxx/internal/version"
+	"github.com/wjzhangq/share/internal/client/ipc"
+	"github.com/wjzhangq/share/internal/client/paths"
+	"github.com/wjzhangq/share/internal/client/spawn"
+	"github.com/wjzhangq/share/internal/proto"
+	"github.com/wjzhangq/share/internal/version"
 )
 
 func RunCLI(args []string) {
@@ -22,7 +22,7 @@ func RunCLI(args []string) {
 	switch cmd {
 	case "dir":
 		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "usage: sharexxx dir <path>")
+			fmt.Fprintln(os.Stderr, "usage: share-cli dir <path>")
 			os.Exit(1)
 		}
 		resp := sendToDeamon(proto.IPCRequest{
@@ -37,7 +37,7 @@ func RunCLI(args []string) {
 
 	case "port":
 		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "usage: sharexxx port <localPort>")
+			fmt.Fprintln(os.Stderr, "usage: share-cli port <localPort>")
 			os.Exit(1)
 		}
 		var port int
@@ -83,7 +83,7 @@ func RunCLI(args []string) {
 
 	case "login":
 		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "usage: sharexxx login <server-url>")
+			fmt.Fprintln(os.Stderr, "usage: share-cli login <server-url>")
 			os.Exit(1)
 		}
 		sm := NewStateManager()
@@ -92,7 +92,7 @@ func RunCLI(args []string) {
 		fmt.Printf("Server URL set to: %s\n", args[1])
 
 	case "version":
-		fmt.Printf("sharexxx %s\n", version.Version)
+		fmt.Printf("share-cli %s\n", version.Version)
 
 	case "daemon":
 		// handled in main
@@ -149,16 +149,16 @@ func parseCloseArgs(args []string) map[string]any {
 }
 
 func printUsage() {
-	fmt.Fprintf(os.Stderr, `sharexxx - share local resources to the internet
+	fmt.Fprintf(os.Stderr, `share-cli - share local resources to the internet
 
 Usage:
-  sharexxx dir <path>           Share a directory
-  sharexxx port <localPort>     Share a local HTTP port
-  sharexxx ls                   List all shares
-  sharexxx close <share-name>   Close a share
-  sharexxx close --all          Close all shares
-  sharexxx status               Show daemon status
-  sharexxx login <server-url>   Set server URL
-  sharexxx version              Print version
+  share-cli dir <path>           Share a directory
+  share-cli port <localPort>     Share a local HTTP port
+  share-cli ls                   List all shares
+  share-cli close <share-name>   Close a share
+  share-cli close --all          Close all shares
+  share-cli status               Show daemon status
+  share-cli login <server-url>   Set server URL
+  share-cli version              Print version
 `)
 }

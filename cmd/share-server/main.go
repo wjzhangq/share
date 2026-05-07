@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/wenjin/sharexxx/internal/server"
+	"github.com/wjzhangq/share/internal/server"
 )
 
 func main() {
-	configPath := "server.yaml"
+	configPath := "config.yaml"
 	if len(os.Args) > 1 {
 		configPath = os.Args[1]
 	}

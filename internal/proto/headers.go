@@ -1,9 +1,9 @@
 package proto
 
 const (
-	HeaderClientToken = "X-Sharexxx-Client-Token"
-	HeaderReqID       = "X-Sharexxx-Req-Id"
-	HeaderOp          = "X-Sharexxx-Op"
+	HeaderClientToken = "X-Share-Client-Token"
+	HeaderReqID       = "X-Share-Req-Id"
+	HeaderOp          = "X-Share-Op"
 )
 
 const (

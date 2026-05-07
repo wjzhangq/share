@@ -1,4 +1,4 @@
-module github.com/wenjin/sharexxx
+module github.com/wjzhangq/share
 
 go 1.25.0
 

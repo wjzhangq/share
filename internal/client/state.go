@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/wenjin/sharexxx/internal/client/paths"
+	"github.com/wjzhangq/share/internal/client/paths"
 )
 
 type ShareState struct {

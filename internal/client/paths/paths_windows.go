@@ -8,9 +8,9 @@ import (
 )
 
 func ipcAddr(uid string) string {
-	return `\\.\pipe\sharexxx-` + uid
+	return `\\.\pipe\share-` + uid
 }
 
 func configDir() string {
-	return filepath.Join(os.Getenv("APPDATA"), "sharexxx")
+	return filepath.Join(os.Getenv("APPDATA"), "share")
 }

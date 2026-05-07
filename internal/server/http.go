@@ -11,7 +11,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/wenjin/sharexxx/internal/server/store"
+	"github.com/wjzhangq/share/internal/server/store"
 )
 
 type Config struct {
@@ -56,7 +56,7 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.Listen = ":8080"
 	}
 	if cfg.Domain == "" {
-		cfg.Domain = "sharexxx.com"
+		cfg.Domain = "share.example.com"
 	}
 	if cfg.DB.Path == "" {
 		cfg.DB.Path = "data.db"

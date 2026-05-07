@@ -6,7 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/wenjin/sharexxx/internal/client"
+	"github.com/wjzhangq/share/internal/client"
 )
 
 func main() {

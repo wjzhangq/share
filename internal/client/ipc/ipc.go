@@ -6,7 +6,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/wenjin/sharexxx/internal/proto"
+	"github.com/wjzhangq/share/internal/proto"
 )
 
 type Server struct {
