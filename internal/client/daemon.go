@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"runtime"
 	"sync"
@@ -21,6 +22,7 @@ type Daemon struct {
 	state    *StateManager
 	ws       *WSClient
 	ipcSrv   *ipc.Server
+	httpCli  *http.Client
 	logger   *slog.Logger
 	ctx      context.Context
 	cancel   context.CancelFunc
@@ -38,6 +40,7 @@ func NewDaemon(logger *slog.Logger) *Daemon {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Daemon{
 		state:  NewStateManager(),
+		httpCli: &http.Client{Timeout: 300 * time.Second},
 		logger: logger,
 		ctx:    ctx,
 		cancel: cancel,

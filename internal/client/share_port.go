@@ -133,7 +133,7 @@ func (d *Daemon) handleForwardReq(fr proto.ForwardReq) {
 		localReq.Header.Set(k, v)
 	}
 
-	resp, err := http.DefaultClient.Do(localReq)
+	resp, err := d.httpCli.Do(localReq)
 	if err != nil {
 		d.sendErrorResp(fr.ReqID, fr.ShareName, 502, "upstream error")
 		return
@@ -175,7 +175,7 @@ func (d *Daemon) pullReqBody(reqID, shareName string, st State) (io.ReadCloser, 
 	req.Header.Set(proto.HeaderReqID, reqID)
 	req.Header.Set(proto.HeaderClientToken, st.UniqueID)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := d.httpCli.Do(req)
 	if err != nil {
 		return nil, err
 	}

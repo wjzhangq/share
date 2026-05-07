@@ -232,7 +232,7 @@ func (d *Daemon) sendInlineResp(reqID, shareName string, st State, status int, h
 	req.Header.Set(proto.HeaderClientToken, st.UniqueID)
 	req.Header.Set("Content-Type", "application/json")
 
-	http.DefaultClient.Do(req)
+	d.httpCli.Do(req)
 }
 
 func (d *Daemon) sendStreamResp(reqID, shareName string, st State, status int, headers map[string]string, contentLength int64, body io.Reader) {
@@ -251,13 +251,13 @@ func (d *Daemon) sendStreamResp(reqID, shareName string, st State, status int, h
 	headReq.Header.Set(proto.HeaderReqID, reqID)
 	headReq.Header.Set(proto.HeaderClientToken, st.UniqueID)
 	headReq.Header.Set("Content-Type", "application/json")
-	http.DefaultClient.Do(headReq)
+	d.httpCli.Do(headReq)
 
 	streamReq, _ := http.NewRequest("POST", url, body)
 	streamReq.Header.Set(proto.HeaderOp, proto.OpRespStream)
 	streamReq.Header.Set(proto.HeaderReqID, reqID)
 	streamReq.Header.Set(proto.HeaderClientToken, st.UniqueID)
-	http.DefaultClient.Do(streamReq)
+	d.httpCli.Do(streamReq)
 }
 
 func (d *Daemon) sendOriginResp(reqID, op string, payload any) {
@@ -271,7 +271,7 @@ func (d *Daemon) sendOriginResp(reqID, op string, payload any) {
 	req.Header.Set(proto.HeaderReqID, reqID)
 	req.Header.Set(proto.HeaderClientToken, st.UniqueID)
 	req.Header.Set("Content-Type", "application/json")
-	http.DefaultClient.Do(req)
+	d.httpCli.Do(req)
 }
 
 func (d *Daemon) sendErrorResp(reqID, shareName string, status int, msg string) {

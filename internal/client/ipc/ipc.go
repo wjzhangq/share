@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"net"
+	"time"
 
 	"github.com/wenjin/sharexxx/internal/proto"
 )
@@ -37,6 +38,7 @@ func (s *Server) Close() error {
 
 func (s *Server) handle(conn net.Conn) {
 	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(30 * time.Second))
 	scanner := bufio.NewScanner(conn)
 	if !scanner.Scan() {
 		return
@@ -61,6 +63,7 @@ func SendCommand(addr string, req proto.IPCRequest) (*proto.IPCResponse, error) 
 		return nil, err
 	}
 	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(30 * time.Second))
 
 	data, _ := json.Marshal(req)
 	data = append(data, '\n')

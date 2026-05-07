@@ -60,8 +60,11 @@ func (h *Hub) HandleWS(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
+	helloCtx, helloCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer helloCancel()
+
 	var hello proto.Hello
-	if err := h.readJSON(ctx, conn, &hello); err != nil {
+	if err := h.readJSON(helloCtx, conn, &hello); err != nil {
 		h.srv.logger.Error("ws read hello", "err", err)
 		conn.Close(websocket.StatusProtocolError, "expected hello")
 		return
@@ -136,10 +139,13 @@ func (h *Hub) readLoop(ctx context.Context, cc *ConnectedClient) {
 	}()
 
 	for {
+		readCtx, readCancel := context.WithTimeout(ctx, 60*time.Second)
 		var raw json.RawMessage
-		if err := h.readJSON(ctx, cc.Conn, &raw); err != nil {
+		if err := h.readJSON(readCtx, cc.Conn, &raw); err != nil {
+			readCancel()
 			return
 		}
+		readCancel()
 
 		var msg proto.WSMessage
 		if err := json.Unmarshal(raw, &msg); err != nil {
@@ -253,7 +259,9 @@ func (h *Hub) SendToClient(uid string, msg any) error {
 	if !ok {
 		return fmt.Errorf("client not connected")
 	}
-	return h.writeJSON(context.Background(), cc.Conn, msg)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return h.writeJSON(ctx, cc.Conn, msg)
 }
 
 func (h *Hub) readJSON(ctx context.Context, conn *websocket.Conn, v any) error {
@@ -269,6 +277,8 @@ func (h *Hub) writeJSON(ctx context.Context, conn *websocket.Conn, v any) error 
 	if err != nil {
 		return err
 	}
-	return conn.Write(ctx, websocket.MessageText, data)
+	writeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	return conn.Write(writeCtx, websocket.MessageText, data)
 }
 

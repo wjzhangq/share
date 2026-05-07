@@ -42,13 +42,19 @@ func (w *WSClient) SetMessageHandler(fn func(json.RawMessage)) {
 }
 
 func (w *WSClient) Connect(ctx context.Context) (*proto.Welcome, error) {
-	conn, _, err := websocket.Dial(ctx, w.serverURL, nil)
+	dialCtx, dialCancel := context.WithTimeout(ctx, 15*time.Second)
+	defer dialCancel()
+
+	conn, _, err := websocket.Dial(dialCtx, w.serverURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("dial: %w", err)
 	}
 	w.mu.Lock()
 	w.conn = conn
 	w.mu.Unlock()
+
+	writeCtx, writeCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer writeCancel()
 
 	hello := proto.Hello{
 		Type:     "hello",
@@ -58,13 +64,16 @@ func (w *WSClient) Connect(ctx context.Context) (*proto.Welcome, error) {
 		Arch:     w.arch,
 		Version:  version.Version,
 	}
-	if err := w.writeJSON(ctx, hello); err != nil {
+	if err := w.writeJSON(writeCtx, hello); err != nil {
 		conn.Close(websocket.StatusInternalError, "")
 		return nil, err
 	}
 
+	readCtx, readCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer readCancel()
+
 	var welcome proto.Welcome
-	if err := w.readJSON(ctx, &welcome); err != nil {
+	if err := w.readJSON(readCtx, &welcome); err != nil {
 		conn.Close(websocket.StatusInternalError, "")
 		return nil, err
 	}
@@ -112,7 +121,9 @@ func (w *WSClient) writeJSON(ctx context.Context, v any) error {
 	if w.conn == nil {
 		return fmt.Errorf("not connected")
 	}
-	return w.conn.Write(ctx, websocket.MessageText, data)
+	writeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	return w.conn.Write(writeCtx, websocket.MessageText, data)
 }
 
 func (w *WSClient) readJSON(ctx context.Context, v any) error {

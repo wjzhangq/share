@@ -284,7 +284,12 @@ func (f *Forwarder) handleRespHead(w http.ResponseWriter, r *http.Request, pr *p
 }
 
 func (f *Forwarder) handleRespStream(w http.ResponseWriter, r *http.Request, pr *pendingRequest) {
-	<-pr.headCh
+	select {
+	case <-pr.headCh:
+	case <-time.After(30 * time.Second):
+		http.Error(w, "timeout waiting for response head", http.StatusGatewayTimeout)
+		return
+	}
 
 	io.Copy(pr.w, r.Body)
 	r.Body.Close()
