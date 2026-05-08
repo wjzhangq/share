@@ -11,6 +11,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/wjzhangq/share/internal/proto"
 	"github.com/wjzhangq/share/internal/server/store"
 )
 
@@ -159,10 +160,12 @@ func (s *Server) parseHost(host string) hostInfo {
 		host = host[:idx]
 	}
 
-	suffix := "." + s.cfg.Domain
-	if host == s.cfg.Domain {
+	// Direct IP or localhost access treated as main domain
+	if host == "127.0.0.1" || host == "localhost" || host == "::1" || host == s.cfg.Domain {
 		return hostInfo{kind: hostKindMain}
 	}
+
+	suffix := "." + s.cfg.Domain
 	if !strings.HasSuffix(host, suffix) {
 		return hostInfo{kind: hostKindUnknown}
 	}
@@ -188,6 +191,10 @@ func (s *Server) rootHandler(w http.ResponseWriter, r *http.Request) {
 	case hostKindMain:
 		if r.URL.Path == "/ws" {
 			s.hub.HandleWS(w, r)
+			return
+		}
+		if r.Header.Get(proto.HeaderOp) != "" {
+			s.fwd.Handle(w, r, hi)
 			return
 		}
 		if strings.HasPrefix(r.URL.Path, "/download") {

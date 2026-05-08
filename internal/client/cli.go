@@ -3,6 +3,7 @@ package client
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/wjzhangq/share/internal/client/ipc"
@@ -28,10 +29,15 @@ func RunCLI(args []string) {
 			fmt.Fprintln(os.Stderr, "usage: share-cli dir <path>")
 			os.Exit(1)
 		}
+		dirPath, err := filepath.Abs(args[1])
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "invalid path: %v\n", err)
+			os.Exit(1)
+		}
 		ensureServerURL(serverURL)
 		resp := sendToDeamon(proto.IPCRequest{
 			Cmd:  "share.create",
-			Args: map[string]any{"kind": "dir", "path": args[1]},
+			Args: map[string]any{"kind": "dir", "path": dirPath},
 		})
 		if !resp.OK {
 			fmt.Fprintf(os.Stderr, "error: %s\n", resp.Err)
@@ -108,6 +114,14 @@ func RunCLI(args []string) {
 		if version.DefaultServerURL != "" {
 			fmt.Printf("default server: %s\n", version.DefaultServerURL)
 		}
+
+	case "stop":
+		resp := sendToDeamon(proto.IPCRequest{Cmd: "quit"})
+		if !resp.OK {
+			fmt.Fprintf(os.Stderr, "error: %s\n", resp.Err)
+			os.Exit(1)
+		}
+		fmt.Println("daemon stopped")
 
 	case "daemon":
 		// handled in main
@@ -201,6 +215,7 @@ Commands:
   close <share-name>   Close a share
   close --all          Close all shares
   status               Show daemon status
+  stop                 Stop the daemon
   login [server-url]   Set server URL (uses default if omitted)
   version              Print version
 

@@ -283,10 +283,16 @@ func (d *Daemon) sendErrorResp(reqID, shareName string, status int, msg string) 
 
 func (d *Daemon) buildShareHost(shareName string, st State) string {
 	domain := d.getDomain()
+	if d.isDirectIP() {
+		return domain
+	}
 	return fmt.Sprintf("c%d-%s.%s", st.ShortID, shareName, domain)
 }
 
 func (d *Daemon) getAnyShareHost(st State) string {
+	if d.isDirectIP() {
+		return d.getDomain()
+	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	for _, s := range d.shares {
@@ -304,6 +310,16 @@ func (d *Daemon) getDomain() string {
 	url = strings.TrimSuffix(url, "/ws")
 	url = strings.TrimSuffix(url, "/")
 	return url
+}
+
+func (d *Daemon) isDirectIP() bool {
+	domain := d.getDomain()
+	host := domain
+	if idx := strings.LastIndex(host, ":"); idx != -1 {
+		host = host[:idx]
+	}
+	return host == "127.0.0.1" || host == "localhost" || host == "::1" ||
+		strings.HasPrefix(host, "192.168.") || strings.HasPrefix(host, "10.")
 }
 
 func (d *Daemon) getShareDomain() string {
@@ -328,15 +344,29 @@ func (d *Daemon) findShareByName(name string) *ActiveShare {
 }
 
 func isPathSafe(root, target string) bool {
-	absRoot, err := filepath.EvalSymlinks(root)
+	absRoot, err := filepath.Abs(root)
 	if err != nil {
 		return false
 	}
-	absTarget, err := filepath.EvalSymlinks(target)
+	absRoot, err = filepath.EvalSymlinks(absRoot)
 	if err != nil {
-		absTarget = target
+		return false
 	}
-	return strings.HasPrefix(absTarget, absRoot)
+
+	absTarget, err := filepath.Abs(target)
+	if err != nil {
+		return false
+	}
+	// EvalSymlinks fails if file doesn't exist yet; use the abs path as fallback
+	if resolved, err := filepath.EvalSymlinks(absTarget); err == nil {
+		absTarget = resolved
+	}
+
+	// Ensure prefix match is on directory boundary
+	if !strings.HasSuffix(absRoot, string(filepath.Separator)) {
+		absRoot += string(filepath.Separator)
+	}
+	return absTarget == strings.TrimSuffix(absRoot, string(filepath.Separator)) || strings.HasPrefix(absTarget, absRoot)
 }
 
 func cleanName(s string) string {

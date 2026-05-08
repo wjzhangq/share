@@ -57,8 +57,12 @@ func (f *Forwarder) Handle(w http.ResponseWriter, r *http.Request, hi hostInfo) 
 }
 
 func (f *Forwarder) handlePublicRequest(w http.ResponseWriter, r *http.Request, hi hostInfo) {
+	start := time.Now()
+	f.srv.logger.Info("req start", "method", r.Method, "path", r.URL.Path, "host", r.Host, "short_id", hi.shortID, "share", hi.shareName, "remote", r.RemoteAddr)
+
 	if r.Header.Get("Upgrade") == "websocket" {
 		http.Error(w, "WebSocket proxy not supported", http.StatusNotImplemented)
+		f.srv.logger.Info("req end", "path", r.URL.Path, "status", 501, "duration", time.Since(start))
 		return
 	}
 
@@ -67,23 +71,28 @@ func (f *Forwarder) handlePublicRequest(w http.ResponseWriter, r *http.Request, 
 		cl, err := f.srv.store.GetClientByShortID(hi.shortID)
 		if err != nil {
 			http.Error(w, "share not found", http.StatusNotFound)
+			f.srv.logger.Info("req end", "path", r.URL.Path, "status", 404, "reason", "client not found", "duration", time.Since(start))
 			return
 		}
 		f.writeOfflinePage(w, cl.Hostname, fmt.Sprintf("c%d", hi.shortID), hi.shareName, "client offline")
+		f.srv.logger.Info("req end", "path", r.URL.Path, "status", 503, "reason", "client offline", "duration", time.Since(start))
 		return
 	}
 
 	share, err := f.srv.store.GetShare(client.UniqueID, hi.shareName)
 	if err != nil || share == nil {
 		http.Error(w, "share not found", http.StatusNotFound)
+		f.srv.logger.Info("req end", "path", r.URL.Path, "status", 404, "reason", "share not found", "duration", time.Since(start))
 		return
 	}
 	if share.Status == "closed" {
 		http.Error(w, "share closed", http.StatusGone)
+		f.srv.logger.Info("req end", "path", r.URL.Path, "status", 410, "reason", "share closed", "duration", time.Since(start))
 		return
 	}
 	if share.Status == "offline" {
 		f.writeOfflinePage(w, "", fmt.Sprintf("c%d", hi.shortID), hi.shareName, "offline (process exited)")
+		f.srv.logger.Info("req end", "path", r.URL.Path, "status", 503, "reason", "process offline", "duration", time.Since(start))
 		return
 	}
 
@@ -144,6 +153,7 @@ func (f *Forwarder) handlePublicRequest(w http.ResponseWriter, r *http.Request, 
 
 	if err := f.srv.hub.SendToClient(client.UniqueID, fwdMsg); err != nil {
 		http.Error(w, "client unreachable", http.StatusBadGateway)
+		f.srv.logger.Info("req end", "path", r.URL.Path, "status", 502, "reason", "client unreachable", "duration", time.Since(start))
 		return
 	}
 
@@ -152,12 +162,14 @@ func (f *Forwarder) handlePublicRequest(w http.ResponseWriter, r *http.Request, 
 	case <-pr.done:
 	case <-time.After(timeout):
 		http.Error(w, "gateway timeout", http.StatusGatewayTimeout)
+		f.srv.logger.Info("req end", "path", r.URL.Path, "status", 504, "reason", "timeout", "duration", time.Since(start))
 		return
 	}
 
 	pr.mu.Lock()
 	defer pr.mu.Unlock()
 	if pr.status == 0 {
+		f.srv.logger.Info("req end", "path", r.URL.Path, "status", 0, "reason", "no response", "duration", time.Since(start))
 		return
 	}
 	for k, v := range pr.headers {
@@ -167,6 +179,7 @@ func (f *Forwarder) handlePublicRequest(w http.ResponseWriter, r *http.Request, 
 	if pr.bodyData != nil {
 		w.Write(pr.bodyData)
 	}
+	f.srv.logger.Info("req end", "path", r.URL.Path, "status", pr.status, "duration", time.Since(start))
 }
 
 func (f *Forwarder) handleOriginAPI(w http.ResponseWriter, r *http.Request, op string) {

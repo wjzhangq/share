@@ -42,8 +42,11 @@ EOF
 ### Client
 
 ```bash
-# 首次设置 server 地址
+# 首次设置 server 地址（如编译时已内置默认地址，可省略参数）
 share-cli login wss://share.example.com/ws
+
+# 也可通过 --url 临时指定 server 地址
+share-cli --url ws://127.0.0.1:8080/ws dir /path/to/project
 
 # 共享目录
 share-cli dir /path/to/project
@@ -60,6 +63,9 @@ share-cli close --all
 
 # 查看状态
 share-cli status
+
+# 停止 daemon
+share-cli stop
 ```
 
 ## 功能
