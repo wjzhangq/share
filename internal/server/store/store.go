@@ -31,8 +31,12 @@ func (s *Store) Close() error {
 }
 
 func (s *Store) migrate() error {
-	_, err := s.db.Exec(schema)
-	return err
+	if _, err := s.db.Exec(schema); err != nil {
+		return err
+	}
+	// add process_cwd column if it doesn't exist (migration for existing DBs)
+	_, _ = s.db.Exec(`ALTER TABLE shares ADD COLUMN process_cwd TEXT`)
+	return nil
 }
 
 const schema = `
@@ -57,6 +61,7 @@ CREATE TABLE IF NOT EXISTS shares (
   local_port     INTEGER,
   process_pid    INTEGER,
   process_exe    TEXT,
+  process_cwd    TEXT,
   process_alive  INTEGER NOT NULL DEFAULT 1,
   status         TEXT NOT NULL,
   online_at      INTEGER,

@@ -35,7 +35,7 @@ func RunCLI(args []string) {
 			os.Exit(1)
 		}
 		ensureServerURL(serverURL)
-		resp := sendToDeamon(proto.IPCRequest{
+		resp := sendToDaemon(proto.IPCRequest{
 			Cmd:  "share.create",
 			Args: map[string]any{"kind": "dir", "path": dirPath},
 		})
@@ -43,7 +43,7 @@ func RunCLI(args []string) {
 			fmt.Fprintf(os.Stderr, "error: %s\n", resp.Err)
 			os.Exit(1)
 		}
-		fmt.Printf("Shared directory: %v\n", resp.Data)
+		printShareResult(resp.Data)
 
 	case "port":
 		if len(args) < 2 {
@@ -57,7 +57,7 @@ func RunCLI(args []string) {
 			fmt.Fprintln(os.Stderr, "invalid port")
 			os.Exit(1)
 		}
-		resp := sendToDeamon(proto.IPCRequest{
+		resp := sendToDaemon(proto.IPCRequest{
 			Cmd:  "share.create",
 			Args: map[string]any{"kind": "port", "port": float64(port)},
 		})
@@ -65,19 +65,50 @@ func RunCLI(args []string) {
 			fmt.Fprintf(os.Stderr, "error: %s\n", resp.Err)
 			os.Exit(1)
 		}
-		fmt.Printf("Shared port: %v\n", resp.Data)
+		printShareResult(resp.Data)
 
 	case "ls":
-		resp := sendToDeamon(proto.IPCRequest{Cmd: "share.list"})
+		resp := sendToDaemon(proto.IPCRequest{Cmd: "share.list"})
 		if !resp.OK {
 			fmt.Fprintf(os.Stderr, "error: %s\n", resp.Err)
 			os.Exit(1)
 		}
-		fmt.Printf("Shares: %v\n", resp.Data)
+		list, ok := resp.Data.([]any)
+		if !ok || len(list) == 0 {
+			fmt.Println("No active shares.")
+			break
+		}
+		for _, item := range list {
+			m, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			name, _ := m["name"].(string)
+			host, _ := m["host"].(string)
+			kind, _ := m["kind"].(string)
+			var detail string
+			switch kind {
+			case "dir":
+				if p, ok := m["path"].(string); ok {
+					detail = p
+				}
+			case "port":
+				if p, ok := m["port"].(float64); ok {
+					detail = fmt.Sprintf(":%d", int(p))
+				}
+			}
+			if host != "" && detail != "" {
+				fmt.Printf("  %-20s  %s  ->  https://%s\n", name, detail, host)
+			} else if host != "" {
+				fmt.Printf("  %-20s  ->  https://%s\n", name, host)
+			} else {
+				fmt.Printf("  %s\n", name)
+			}
+		}
 
 	case "close":
 		args := parseCloseArgs(args[1:])
-		resp := sendToDeamon(proto.IPCRequest{Cmd: "share.close", Args: args})
+		resp := sendToDaemon(proto.IPCRequest{Cmd: "share.close", Args: args})
 		if !resp.OK {
 			fmt.Fprintf(os.Stderr, "error: %s\n", resp.Err)
 			os.Exit(1)
@@ -85,7 +116,7 @@ func RunCLI(args []string) {
 		fmt.Println("OK")
 
 	case "status":
-		resp := sendToDeamon(proto.IPCRequest{Cmd: "status"})
+		resp := sendToDaemon(proto.IPCRequest{Cmd: "status"})
 		if !resp.OK {
 			fmt.Fprintf(os.Stderr, "error: %s\n", resp.Err)
 			os.Exit(1)
@@ -116,12 +147,23 @@ func RunCLI(args []string) {
 		}
 
 	case "stop":
-		resp := sendToDeamon(proto.IPCRequest{Cmd: "quit"})
+		resp := sendToDaemon(proto.IPCRequest{Cmd: "quit"})
 		if !resp.OK {
 			fmt.Fprintf(os.Stderr, "error: %s\n", resp.Err)
 			os.Exit(1)
 		}
-		fmt.Println("daemon stopped")
+		// wait for daemon process to exit by polling the socket
+		sm := NewStateManager()
+		sm.Load()
+		addr := paths.IPCAddr(sm.Get().UniqueID)
+		for i := 0; i < 20; i++ {
+			time.Sleep(100 * time.Millisecond)
+			if _, err := ipc.Dial(addr); err != nil {
+				fmt.Println("daemon stopped")
+				return
+			}
+		}
+		fmt.Fprintln(os.Stderr, "warning: daemon may still be running")
 
 	case "daemon":
 		// handled in main
@@ -134,7 +176,7 @@ func RunCLI(args []string) {
 	}
 }
 
-func sendToDeamon(req proto.IPCRequest) proto.IPCResponse {
+func sendToDaemon(req proto.IPCRequest) proto.IPCResponse {
 	sm := NewStateManager()
 	sm.Load()
 	st := sm.Get()
@@ -200,6 +242,20 @@ func parseCloseArgs(args []string) map[string]any {
 		return map[string]any{"name": args[0]}
 	}
 	return map[string]any{}
+}
+
+func printShareResult(data any) {
+	m, ok := data.(map[string]any)
+	if !ok {
+		fmt.Printf("share active: %v\n", data)
+		return
+	}
+	if url, ok := m["url"].(string); ok {
+		fmt.Printf("Remote URL: %s\n", url)
+	}
+	if hint, ok := m["hint"].(string); ok {
+		fmt.Printf("Share name: %s\n", hint)
+	}
 }
 
 func printUsage() {

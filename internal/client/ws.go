@@ -143,7 +143,7 @@ func (w *WSClient) StartPing(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				w.SendJSON(ctx, proto.Pong{Type: "pong"})
+				w.SendJSON(ctx, proto.Ping{Type: "ping"})
 			}
 		}
 	}()

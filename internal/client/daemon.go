@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +19,11 @@ import (
 	"github.com/wjzhangq/share/internal/proto"
 	"github.com/wjzhangq/share/internal/version"
 )
+
+type pendingShare struct {
+	ch    chan proto.ShareCreated
+	state ShareState
+}
 
 type Daemon struct {
 	state    *StateManager
@@ -29,6 +35,10 @@ type Daemon struct {
 	cancel   context.CancelFunc
 	mu       sync.Mutex
 	shares   map[string]*ActiveShare
+	pending  map[string]*pendingShare // hintName -> pending
+
+	wsMu    sync.Mutex
+	wsConns map[string]*wsProxyConn
 }
 
 type ActiveShare struct {
@@ -40,12 +50,14 @@ type ActiveShare struct {
 func NewDaemon(logger *slog.Logger) *Daemon {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Daemon{
-		state:  NewStateManager(),
+		state:   NewStateManager(),
 		httpCli: &http.Client{Timeout: 300 * time.Second},
-		logger: logger,
-		ctx:    ctx,
-		cancel: cancel,
-		shares: make(map[string]*ActiveShare),
+		logger:  logger,
+		ctx:     ctx,
+		cancel:  cancel,
+		shares:  make(map[string]*ActiveShare),
+		pending: make(map[string]*pendingShare),
+		wsConns: make(map[string]*wsProxyConn),
 	}
 }
 
@@ -153,7 +165,37 @@ func (d *Daemon) handleWSMessage(raw json.RawMessage) {
 		var sc proto.ShareCreated
 		json.Unmarshal(raw, &sc)
 		d.mu.Lock()
-		d.shares[sc.ShareName] = &ActiveShare{ShareName: sc.ShareName, FullHost: sc.FullHost}
+		as := &ActiveShare{ShareName: sc.ShareName, FullHost: sc.FullHost}
+		// find matching pending entry to get the ShareState
+		var notifyCh chan proto.ShareCreated
+		if ps, ok := d.pending[sc.ShareName]; ok {
+			as.State = ps.state
+			notifyCh = ps.ch
+		} else {
+			for hint, ps := range d.pending {
+				if strings.HasPrefix(sc.ShareName, hint) {
+					as.State = ps.state
+					notifyCh = ps.ch
+					break
+				}
+			}
+		}
+		// fallback: look up from persisted state by share name
+		if as.State.SourceKey == "" {
+			for _, ss := range d.state.Get().Shares {
+				if ss.ShareName == sc.ShareName {
+					as.State = ss
+					break
+				}
+			}
+		}
+		d.shares[sc.ShareName] = as
+		if notifyCh != nil {
+			select {
+			case notifyCh <- sc:
+			default:
+			}
+		}
 		d.mu.Unlock()
 		d.logger.Info("share active", "name", sc.ShareName, "host", sc.FullHost)
 	case "share.closed":
@@ -180,6 +222,18 @@ func (d *Daemon) handleWSMessage(raw json.RawMessage) {
 		var dr proto.DirRead
 		json.Unmarshal(raw, &dr)
 		go d.handleDirRead(dr)
+	case "ws.open":
+		var wo proto.WSOpen
+		json.Unmarshal(raw, &wo)
+		go d.handleWSOpen(wo)
+	case "ws.frame":
+		var wf proto.WSFrame
+		json.Unmarshal(raw, &wf)
+		d.dispatchWSFrame(wf)
+	case "ws.close":
+		var wc proto.WSClose
+		json.Unmarshal(raw, &wc)
+		d.closeWSConn(wc.ConnID)
 	}
 }
 
@@ -218,12 +272,20 @@ func (d *Daemon) ipcShareCreate(args map[string]any) proto.IPCResponse {
 func (d *Daemon) ipcShareList() proto.IPCResponse {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	var list []map[string]string
+	var list []map[string]any
 	for _, s := range d.shares {
-		list = append(list, map[string]string{
+		item := map[string]any{
 			"name": s.ShareName,
 			"host": s.FullHost,
-		})
+			"kind": s.State.Kind,
+		}
+		if s.State.LocalPath != "" {
+			item["path"] = s.State.LocalPath
+		}
+		if s.State.LocalPort != 0 {
+			item["port"] = s.State.LocalPort
+		}
+		list = append(list, item)
 	}
 	return proto.IPCResponse{OK: true, Data: list}
 }
@@ -258,6 +320,30 @@ func (d *Daemon) ipcStatus() proto.IPCResponse {
 		"server_url": st.ServerURL,
 		"shares":     len(d.shares),
 	}}
+}
+
+func (d *Daemon) waitShareCreated(ss ShareState, fn func()) (proto.ShareCreated, bool) {
+	ch := make(chan proto.ShareCreated, 1)
+	d.mu.Lock()
+	d.pending[ss.ShareName] = &pendingShare{ch: ch, state: ss}
+	d.mu.Unlock()
+
+	defer func() {
+		d.mu.Lock()
+		delete(d.pending, ss.ShareName)
+		d.mu.Unlock()
+	}()
+
+	fn()
+
+	select {
+	case sc := <-ch:
+		return sc, true
+	case <-time.After(10 * time.Second):
+		return proto.ShareCreated{}, false
+	case <-d.ctx.Done():
+		return proto.ShareCreated{}, false
+	}
 }
 
 func (d *Daemon) Shutdown() {

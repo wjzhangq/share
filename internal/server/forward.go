@@ -10,9 +10,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/coder/websocket"
 	"github.com/google/uuid"
 
 	"github.com/wjzhangq/share/internal/proto"
+	"github.com/wjzhangq/share/internal/server/store"
 )
 
 type pendingRequest struct {
@@ -34,16 +36,33 @@ type pendingRequest struct {
 	streamCh chan io.ReadCloser
 }
 
+// wsSession holds state for a proxied WebSocket connection.
+type wsSession struct {
+	connID    string
+	clientUID string
+	openedCh  chan struct{}
+	errorCh   chan string
+	// frames from client -> browser
+	fromClient chan proto.WSFrame
+	// conn is the browser-side WebSocket
+	conn *websocket.Conn
+	mu   sync.Mutex
+}
+
 type Forwarder struct {
-	srv      *Server
-	mu       sync.RWMutex
-	pending  map[string]*pendingRequest
+	srv     *Server
+	mu      sync.RWMutex
+	pending map[string]*pendingRequest
+
+	wsMu      sync.RWMutex
+	wsSessions map[string]*wsSession
 }
 
 func NewForwarder(srv *Server) *Forwarder {
 	return &Forwarder{
-		srv:     srv,
-		pending: make(map[string]*pendingRequest),
+		srv:        srv,
+		pending:    make(map[string]*pendingRequest),
+		wsSessions: make(map[string]*wsSession),
 	}
 }
 
@@ -59,12 +78,6 @@ func (f *Forwarder) Handle(w http.ResponseWriter, r *http.Request, hi hostInfo) 
 func (f *Forwarder) handlePublicRequest(w http.ResponseWriter, r *http.Request, hi hostInfo) {
 	start := time.Now()
 	f.srv.logger.Info("req start", "method", r.Method, "path", r.URL.Path, "host", r.Host, "short_id", hi.shortID, "share", hi.shareName, "remote", r.RemoteAddr)
-
-	if r.Header.Get("Upgrade") == "websocket" {
-		http.Error(w, "WebSocket proxy not supported", http.StatusNotImplemented)
-		f.srv.logger.Info("req end", "path", r.URL.Path, "status", 501, "duration", time.Since(start))
-		return
-	}
 
 	client := f.srv.hub.GetClientByShortID(hi.shortID)
 	if client == nil {
@@ -96,6 +109,15 @@ func (f *Forwarder) handlePublicRequest(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
+	if r.Header.Get("Upgrade") == "websocket" {
+		f.handleWSProxy(w, r, hi, client, start)
+		return
+	}
+
+	f.handleHTTPForward(w, r, hi, client, share, start)
+}
+
+func (f *Forwarder) handleHTTPForward(w http.ResponseWriter, r *http.Request, hi hostInfo, client *ConnectedClient, share *store.Share, start time.Time) {
 	reqID := uuid.New().String()
 	pr := &pendingRequest{
 		reqID:     reqID,
@@ -182,6 +204,124 @@ func (f *Forwarder) handlePublicRequest(w http.ResponseWriter, r *http.Request, 
 	f.srv.logger.Info("req end", "path", r.URL.Path, "status", pr.status, "duration", time.Since(start))
 }
 
+func (f *Forwarder) handleWSProxy(w http.ResponseWriter, r *http.Request, hi hostInfo, client *ConnectedClient, start time.Time) {
+	connID := uuid.New().String()
+
+	sess := &wsSession{
+		connID:     connID,
+		clientUID:  client.UniqueID,
+		openedCh:   make(chan struct{}),
+		errorCh:    make(chan string, 1),
+		fromClient: make(chan proto.WSFrame, 64),
+	}
+
+	f.wsMu.Lock()
+	f.wsSessions[connID] = sess
+	f.wsMu.Unlock()
+
+	defer func() {
+		f.wsMu.Lock()
+		delete(f.wsSessions, connID)
+		f.wsMu.Unlock()
+	}()
+
+	headers := make(map[string]string)
+	for k := range r.Header {
+		if k == proto.HeaderClientToken || k == proto.HeaderReqID || k == proto.HeaderOp {
+			continue
+		}
+		headers[k] = r.Header.Get(k)
+	}
+
+	openMsg := proto.WSOpen{
+		Type:      "ws.open",
+		ConnID:    connID,
+		ShareName: hi.shareName,
+		Path:      r.URL.RequestURI(),
+		Headers:   headers,
+	}
+	if err := f.srv.hub.SendToClient(client.UniqueID, openMsg); err != nil {
+		http.Error(w, "client unreachable", http.StatusBadGateway)
+		f.srv.logger.Info("ws proxy end", "path", r.URL.Path, "status", 502, "reason", "client unreachable", "duration", time.Since(start))
+		return
+	}
+
+	select {
+	case <-sess.openedCh:
+	case errMsg := <-sess.errorCh:
+		http.Error(w, errMsg, http.StatusBadGateway)
+		f.srv.logger.Info("ws proxy end", "path", r.URL.Path, "status", 502, "reason", errMsg, "duration", time.Since(start))
+		return
+	case <-time.After(15 * time.Second):
+		http.Error(w, "ws open timeout", http.StatusGatewayTimeout)
+		f.srv.logger.Info("ws proxy end", "path", r.URL.Path, "status", 504, "reason", "open timeout", "duration", time.Since(start))
+		return
+	}
+
+	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		InsecureSkipVerify: true,
+	})
+	if err != nil {
+		f.srv.logger.Error("ws accept browser", "err", err)
+		f.srv.hub.SendToClient(client.UniqueID, proto.WSClose{Type: "ws.close", ConnID: connID})
+		return
+	}
+	sess.mu.Lock()
+	sess.conn = conn
+	sess.mu.Unlock()
+
+	f.srv.logger.Info("ws proxy open", "conn_id", connID, "path", r.URL.Path)
+
+	ctx := r.Context()
+	done := make(chan struct{})
+
+	// browser -> client
+	go func() {
+		defer close(done)
+		for {
+			msgType, data, err := conn.Read(ctx)
+			if err != nil {
+				break
+			}
+			mt := int(msgType)
+			frame := proto.WSFrame{
+				Type:    "ws.frame",
+				ConnID:  connID,
+				MsgType: mt,
+				DataB64: base64.StdEncoding.EncodeToString(data),
+			}
+			if sendErr := f.srv.hub.SendToClient(client.UniqueID, frame); sendErr != nil {
+				break
+			}
+		}
+		f.srv.hub.SendToClient(client.UniqueID, proto.WSClose{Type: "ws.close", ConnID: connID})
+	}()
+
+	// client -> browser
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			case frame, ok := <-sess.fromClient:
+				if !ok {
+					conn.Close(websocket.StatusNormalClosure, "")
+					return
+				}
+				data, err := base64.StdEncoding.DecodeString(frame.DataB64)
+				if err != nil {
+					continue
+				}
+				writeCtx := ctx
+				conn.Write(writeCtx, websocket.MessageType(frame.MsgType), data)
+			}
+		}
+	}()
+
+	<-done
+	f.srv.logger.Info("ws proxy closed", "conn_id", connID, "duration", time.Since(start))
+}
+
 func (f *Forwarder) handleOriginAPI(w http.ResponseWriter, r *http.Request, op string) {
 	token := r.Header.Get(proto.HeaderClientToken)
 	reqID := r.Header.Get(proto.HeaderReqID)
@@ -194,6 +334,21 @@ func (f *Forwarder) handleOriginAPI(w http.ResponseWriter, r *http.Request, op s
 	cc := f.srv.hub.GetClient(token)
 	if cc == nil {
 		http.Error(w, "unauthorized", http.StatusForbidden)
+		return
+	}
+
+	switch op {
+	case proto.OpWSOpened:
+		f.handleWSOpened(w, r, cc, reqID)
+		return
+	case proto.OpWSOpenError:
+		f.handleWSOpenError(w, r, cc, reqID)
+		return
+	case proto.OpWSFrameToServer:
+		f.handleWSFrameToServer(w, r, cc, reqID)
+		return
+	case proto.OpWSCloseFromClient:
+		f.handleWSCloseFromClient(w, cc, reqID)
 		return
 	}
 
@@ -224,6 +379,99 @@ func (f *Forwarder) handleOriginAPI(w http.ResponseWriter, r *http.Request, op s
 	default:
 		http.Error(w, "unknown op", http.StatusBadRequest)
 	}
+}
+
+func (f *Forwarder) handleWSOpened(w http.ResponseWriter, _ *http.Request, cc *ConnectedClient, connID string) {
+	f.wsMu.RLock()
+	sess, ok := f.wsSessions[connID]
+	f.wsMu.RUnlock()
+	if !ok {
+		http.Error(w, "session not found", http.StatusNotFound)
+		return
+	}
+	if sess.clientUID != cc.UniqueID {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	select {
+	case <-sess.openedCh:
+	default:
+		close(sess.openedCh)
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func (f *Forwarder) handleWSOpenError(w http.ResponseWriter, r *http.Request, cc *ConnectedClient, connID string) {
+	f.wsMu.RLock()
+	sess, ok := f.wsSessions[connID]
+	f.wsMu.RUnlock()
+	if !ok {
+		http.Error(w, "session not found", http.StatusNotFound)
+		return
+	}
+	if sess.clientUID != cc.UniqueID {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	var body struct {
+		Message string `json:"message"`
+	}
+	json.NewDecoder(r.Body).Decode(&body)
+	msg := body.Message
+	if msg == "" {
+		msg = "upstream ws connect failed"
+	}
+	select {
+	case sess.errorCh <- msg:
+	default:
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func (f *Forwarder) handleWSFrameToServer(w http.ResponseWriter, r *http.Request, cc *ConnectedClient, connID string) {
+	f.wsMu.RLock()
+	sess, ok := f.wsSessions[connID]
+	f.wsMu.RUnlock()
+	if !ok {
+		http.Error(w, "session not found", http.StatusNotFound)
+		return
+	}
+	if sess.clientUID != cc.UniqueID {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	var frame proto.WSFrame
+	if err := json.NewDecoder(r.Body).Decode(&frame); err != nil {
+		http.Error(w, "bad json", http.StatusBadRequest)
+		return
+	}
+	frame.ConnID = connID
+	select {
+	case sess.fromClient <- frame:
+	default:
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func (f *Forwarder) handleWSCloseFromClient(w http.ResponseWriter, cc *ConnectedClient, connID string) {
+	f.wsMu.RLock()
+	sess, ok := f.wsSessions[connID]
+	f.wsMu.RUnlock()
+	if !ok {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if sess.clientUID != cc.UniqueID {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	sess.mu.Lock()
+	if sess.conn != nil {
+		sess.conn.Close(websocket.StatusNormalClosure, "")
+	}
+	sess.mu.Unlock()
+	close(sess.fromClient)
+	w.WriteHeader(http.StatusOK)
 }
 
 func (f *Forwarder) handlePullReqBody(w http.ResponseWriter, pr *pendingRequest) {
@@ -304,7 +552,21 @@ func (f *Forwarder) handleRespStream(w http.ResponseWriter, r *http.Request, pr 
 		return
 	}
 
-	io.Copy(pr.w, r.Body)
+	if flusher, ok := pr.w.(http.Flusher); ok {
+		buf := make([]byte, 4096)
+		for {
+			n, err := r.Body.Read(buf)
+			if n > 0 {
+				pr.w.Write(buf[:n])
+				flusher.Flush()
+			}
+			if err != nil {
+				break
+			}
+		}
+	} else {
+		io.Copy(pr.w, r.Body)
+	}
 	r.Body.Close()
 
 	pr.mu.Lock()
@@ -326,7 +588,9 @@ func (f *Forwarder) handleDirListResp(w http.ResponseWriter, r *http.Request, pr
 
 	if resp.HasIndex {
 		pr.mu.Lock()
-		pr.status = 0
+		pr.status = http.StatusFound
+		pr.headers = map[string]string{"Location": "index.html"}
+		pr.bodyData = []byte{}
 		pr.mu.Unlock()
 		close(pr.done)
 		w.WriteHeader(http.StatusOK)

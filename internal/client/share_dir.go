@@ -24,6 +24,9 @@ func (d *Daemon) shareDir(path string) proto.IPCResponse {
 	if err != nil || !info.IsDir() {
 		return proto.IPCResponse{Err: "path does not exist or is not a directory"}
 	}
+	if isRootPath(absPath) {
+		return proto.IPCResponse{Err: "sharing the root directory is not allowed"}
+	}
 
 	hintName := dirHintName(absPath)
 	sourceKey := dirSourceKey(absPath)
@@ -35,9 +38,16 @@ func (d *Daemon) shareDir(path string) proto.IPCResponse {
 		SourceKey: sourceKey,
 	}
 	d.state.AddShare(ss)
-	d.createShare(ss)
 
-	return proto.IPCResponse{OK: true, Data: map[string]string{"hint": hintName, "path": absPath}}
+	sc, ok := d.waitShareCreated(ss, func() { d.createShare(ss) })
+	if !ok {
+		return proto.IPCResponse{OK: true, Data: map[string]string{"hint": hintName, "path": absPath}}
+	}
+	return proto.IPCResponse{OK: true, Data: map[string]string{
+		"hint": sc.ShareName,
+		"path": absPath,
+		"url":  "https://" + sc.FullHost,
+	}}
 }
 
 func dirHintName(absPath string) string {
@@ -147,9 +157,6 @@ func (d *Daemon) handleDirList(dl proto.DirList) {
 }
 
 func (d *Daemon) sendDirListResp(reqID string, entries []proto.DirEntry, hasIndex, truncated bool) {
-	st := d.state.Get()
-	fullHost := fmt.Sprintf("c%d-%s.%s", st.ShortID, "", d.getShareDomain())
-
 	resp := proto.DirListResp{
 		Type:      "dir.list.resp",
 		ReqID:     reqID,
@@ -158,7 +165,6 @@ func (d *Daemon) sendDirListResp(reqID string, entries []proto.DirEntry, hasInde
 		Truncated: truncated,
 	}
 
-	_ = fullHost
 	d.sendOriginResp(reqID, proto.OpDirListResp, resp)
 }
 
@@ -367,6 +373,10 @@ func isPathSafe(root, target string) bool {
 		absRoot += string(filepath.Separator)
 	}
 	return absTarget == strings.TrimSuffix(absRoot, string(filepath.Separator)) || strings.HasPrefix(absTarget, absRoot)
+}
+
+func isRootPath(absPath string) bool {
+	return absPath == filepath.VolumeName(absPath)+string(filepath.Separator)
 }
 
 func cleanName(s string) string {

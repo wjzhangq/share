@@ -10,12 +10,13 @@ import (
 )
 
 type ShareState struct {
-	Kind      string `json:"kind"`
-	ShareName string `json:"share_name"`
-	LocalPath string `json:"local_path,omitempty"`
-	LocalPort int    `json:"local_port,omitempty"`
-	SourceKey string `json:"source_key"`
+	Kind       string `json:"kind"`
+	ShareName  string `json:"share_name"`
+	LocalPath  string `json:"local_path,omitempty"`
+	LocalPort  int    `json:"local_port,omitempty"`
+	SourceKey  string `json:"source_key"`
 	ProcessExe string `json:"process_exe,omitempty"`
+	ProcessCwd string `json:"process_cwd,omitempty"`
 }
 
 type State struct {

@@ -21,14 +21,15 @@ type Welcome struct {
 }
 
 type ShareCreate struct {
-	Type       string `json:"type"`
-	Kind       string `json:"kind"`
-	HintName   string `json:"hint_name"`
-	SourceKey  string `json:"source_key"`
-	LocalPath  string `json:"local_path,omitempty"`
-	LocalPort  int    `json:"local_port,omitempty"`
-	ProcessPID int    `json:"process_pid,omitempty"`
-	ProcessExe string `json:"process_exe,omitempty"`
+	Type        string `json:"type"`
+	Kind        string `json:"kind"`
+	HintName    string `json:"hint_name"`
+	SourceKey   string `json:"source_key"`
+	LocalPath   string `json:"local_path,omitempty"`
+	LocalPort   int    `json:"local_port,omitempty"`
+	ProcessPID  int    `json:"process_pid,omitempty"`
+	ProcessExe  string `json:"process_exe,omitempty"`
+	ProcessCwd  string `json:"process_cwd,omitempty"`
 }
 
 type ShareCreated struct {
@@ -135,4 +136,38 @@ type Ping struct {
 
 type Pong struct {
 	Type string `json:"type"`
+}
+
+// WebSocket proxy messages
+type WSOpen struct {
+	Type      string            `json:"type"`
+	ConnID    string            `json:"conn_id"`
+	ShareName string            `json:"share_name"`
+	Path      string            `json:"path"`
+	Headers   map[string]string `json:"headers"`
+}
+
+type WSOpened struct {
+	Type   string `json:"type"`
+	ConnID string `json:"conn_id"`
+}
+
+type WSOpenError struct {
+	Type    string `json:"type"`
+	ConnID  string `json:"conn_id"`
+	Message string `json:"message"`
+}
+
+type WSFrame struct {
+	Type    string `json:"type"`
+	ConnID  string `json:"conn_id"`
+	MsgType int    `json:"msg_type"` // 1=text, 2=binary
+	DataB64 string `json:"data_b64"`
+}
+
+type WSClose struct {
+	Type   string `json:"type"`
+	ConnID string `json:"conn_id"`
+	Code   int    `json:"code,omitempty"`
+	Reason string `json:"reason,omitempty"`
 }

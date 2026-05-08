@@ -10,6 +10,7 @@ import (
 type ProcessInfo struct {
 	PID int32
 	Exe string
+	Cwd string
 }
 
 func FindListeningProcess(port int) (*ProcessInfo, error) {
@@ -41,11 +42,12 @@ func FindListeningProcess(port int) (*ProcessInfo, error) {
 		if err != nil {
 			continue
 		}
+		cwd, _ := p.Cwd()
 
 		if result != nil && result.PID != c.Pid {
 			return nil, fmt.Errorf("multiple processes listening on port %d", port)
 		}
-		result = &ProcessInfo{PID: c.Pid, Exe: exe}
+		result = &ProcessInfo{PID: c.Pid, Exe: exe, Cwd: cwd}
 	}
 
 	if result == nil {

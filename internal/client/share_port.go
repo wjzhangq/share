@@ -29,6 +29,7 @@ func (d *Daemon) sharePort(port int) proto.IPCResponse {
 		LocalPort:  port,
 		SourceKey:  sourceKey,
 		ProcessExe: proc.Exe,
+		ProcessCwd: proc.Cwd,
 	}
 	d.state.AddShare(ss)
 
@@ -40,16 +41,26 @@ func (d *Daemon) sharePort(port int) proto.IPCResponse {
 		LocalPort:  port,
 		ProcessPID: int(proc.PID),
 		ProcessExe: proc.Exe,
+		ProcessCwd: proc.Cwd,
 	}
-	d.ws.SendJSON(d.ctx, msg)
 
 	go d.watchProcess(hintName, proc.PID, proc.Exe, port)
 
+	sc, ok := d.waitShareCreated(ss, func() { d.ws.SendJSON(d.ctx, msg) })
+	if !ok {
+		return proto.IPCResponse{OK: true, Data: map[string]any{
+			"hint": hintName,
+			"port": port,
+			"pid":  proc.PID,
+			"exe":  proc.Exe,
+		}}
+	}
 	return proto.IPCResponse{OK: true, Data: map[string]any{
-		"hint": hintName,
+		"hint": sc.ShareName,
 		"port": port,
 		"pid":  proc.PID,
 		"exe":  proc.Exe,
+		"url":  "https://" + sc.FullHost,
 	}}
 }
 

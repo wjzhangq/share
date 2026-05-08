@@ -119,11 +119,11 @@ func (s *Server) adminClientDetail(w http.ResponseWriter, r *http.Request, path 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>c%d - share admin</title>
-<style>body{font-family:sans-serif;margin:2em}table{border-collapse:collapse;width:100%%}td,th{border:1px solid #ddd;padding:8px;text-align:left}th{background:#f5f5f5}.active{color:green}.offline{color:orange}.closed{color:red}</style>
+<style>body{font-family:sans-serif;margin:2em}table{border-collapse:collapse;width:100%%}td,th{border:1px solid #ddd;padding:8px;text-align:left}th{background:#f5f5f5}.active{color:green}.offline{color:orange}.closed{color:red}.detail{color:#555;font-size:0.9em}</style>
 </head><body><h1>c%d — %s</h1>
 <p>OS: %s/%s | Version: %s</p>
 <p>Online at: %s | Offline at: %s</p>
-<h2>Shares</h2><table><tr><th>Name</th><th>Kind</th><th>Status</th><th>Host</th><th>Action</th></tr>`,
+<h2>Shares</h2><table><tr><th>Name</th><th>Kind</th><th>Detail</th><th>Status</th><th>Host</th><th>Action</th></tr>`,
 		shortID, shortID, html.EscapeString(client.Hostname),
 		client.OS, client.Arch, html.EscapeString(client.Version),
 		formatTime(client.OnlineAt), formatTime(client.OfflineAt)))
@@ -134,8 +134,21 @@ func (s *Server) adminClientDetail(w http.ResponseWriter, r *http.Request, path 
 		if sh.Status != "closed" {
 			action = fmt.Sprintf(`<form method="POST" action="/clients/c%d/share/%s/close" style="display:inline"><button type="submit">Close</button></form>`, shortID, sh.ShareName)
 		}
-		sb.WriteString(fmt.Sprintf(`<tr><td>%s</td><td>%s</td><td><span class="%s">%s</span></td><td><a href="https://%s">%s</a></td><td>%s</td></tr>`,
-			html.EscapeString(sh.ShareName), sh.Kind, sh.Status, sh.Status, fullHost, fullHost, action))
+		var detail string
+		switch sh.Kind {
+		case "dir":
+			detail = html.EscapeString(sh.LocalPath)
+		case "port":
+			detail = fmt.Sprintf(":%d", sh.LocalPort)
+			if sh.ProcessExe != "" {
+				detail += "<br><span class=\"detail\">" + html.EscapeString(sh.ProcessExe) + "</span>"
+			}
+			if sh.ProcessCwd != "" {
+				detail += "<br><span class=\"detail\">cwd: " + html.EscapeString(sh.ProcessCwd) + "</span>"
+			}
+		}
+		sb.WriteString(fmt.Sprintf(`<tr><td>%s</td><td>%s</td><td>%s</td><td><span class="%s">%s</span></td><td><a href="https://%s">%s</a></td><td>%s</td></tr>`,
+			html.EscapeString(sh.ShareName), sh.Kind, detail, sh.Status, sh.Status, fullHost, fullHost, action))
 	}
 
 	sb.WriteString("</table><p><a href=\"/clients\">&larr; Back</a></p></body></html>")

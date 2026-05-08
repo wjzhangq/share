@@ -107,7 +107,14 @@ func (h *Hub) HandleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.srv.logger.Info("client connected", "uid", hello.UniqueID, "short_id", client.ShortID, "hostname", hello.Hostname)
+	h.srv.logger.Info("client connected",
+		"uid", hello.UniqueID,
+		"short_id", client.ShortID,
+		"hostname", hello.Hostname,
+		"os", hello.OS,
+		"arch", hello.Arch,
+		"version", hello.Version,
+	)
 
 	h.readLoop(ctx, cc)
 
@@ -195,7 +202,7 @@ func (h *Hub) handleShareCreate(ctx context.Context, cc *ConnectedClient, raw js
 		return
 	}
 
-	share, err := h.srv.store.CreateShare(cc.UniqueID, shareName, req.Kind, req.LocalPath, req.LocalPort, req.ProcessPID, req.ProcessExe)
+	share, err := h.srv.store.CreateShare(cc.UniqueID, shareName, req.Kind, req.LocalPath, req.LocalPort, req.ProcessPID, req.ProcessExe, req.ProcessCwd)
 	if err != nil {
 		h.writeJSON(ctx, cc.Conn, proto.ShareError{Type: "share.error", Code: "create_failed", Message: err.Error()})
 		return
@@ -205,7 +212,16 @@ func (h *Hub) handleShareCreate(ctx context.Context, cc *ConnectedClient, raw js
 	h.writeJSON(ctx, cc.Conn, proto.ShareCreated{
 		Type: "share.created", ShareName: shareName, FullHost: fullHost, ShareID: share.ID,
 	})
-	h.srv.logger.Info("share created", "client", cc.UniqueID, "name", shareName, "kind", req.Kind)
+	h.srv.logger.Info("share created",
+		"client", cc.UniqueID,
+		"short_id", cc.ShortID,
+		"name", shareName,
+		"kind", req.Kind,
+		"local_port", req.LocalPort,
+		"local_path", req.LocalPath,
+		"process_exe", req.ProcessExe,
+		"url", "https://"+fullHost,
+	)
 }
 
 func (h *Hub) handleShareList(ctx context.Context, cc *ConnectedClient) {
