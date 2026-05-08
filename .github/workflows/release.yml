@@ -45,18 +45,8 @@ jobs:
           CGO_ENABLED: 0
         run: |
           VERSION=${GITHUB_REF_NAME}
-          go build -ldflags "-s -w -X github.com/wjzhangq/share/internal/version.Version=${VERSION}" \
+          go build -ldflags "-s -w -X github.com/wjzhangq/share/internal/version.Version=${VERSION} -X github.com/wjzhangq/share/internal/version.DefaultServerURL=wss://share.zhangwenjin.com/ws" \
             -o share-cli-${{ matrix.suffix }}${{ matrix.ext }} ./cmd/share-cli/
-
-      - name: Build server
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: 0
-        run: |
-          VERSION=${GITHUB_REF_NAME}
-          go build -ldflags "-s -w -X github.com/wjzhangq/share/internal/version.Version=${VERSION}" \
-            -o share-server-${{ matrix.suffix }}${{ matrix.ext }} ./cmd/share-server/
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -64,7 +54,6 @@ jobs:
           name: binaries-${{ matrix.suffix }}
           path: |
             share-cli-${{ matrix.suffix }}${{ matrix.ext }}
-            share-server-${{ matrix.suffix }}${{ matrix.ext }}
 
   release:
     needs: build
