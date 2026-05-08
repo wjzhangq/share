@@ -328,9 +328,6 @@ func (d *Daemon) isDirectIP() bool {
 		strings.HasPrefix(host, "192.168.") || strings.HasPrefix(host, "10.")
 }
 
-func (d *Daemon) getShareDomain() string {
-	return d.getDomain()
-}
 
 func (d *Daemon) scheme() string {
 	st := d.state.Get()

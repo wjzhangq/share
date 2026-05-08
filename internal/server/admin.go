@@ -42,7 +42,7 @@ func (s *Server) checkBasicAuth(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
-func (s *Server) adminOverview(w http.ResponseWriter, r *http.Request) {
+func (s *Server) adminOverview(w http.ResponseWriter, _ *http.Request) {
 	clients, _ := s.store.ListClients()
 	onlineCount := 0
 	totalShares := 0
@@ -64,7 +64,7 @@ func (s *Server) adminOverview(w http.ResponseWriter, r *http.Request) {
 </body></html>`, onlineCount, len(clients), totalShares)
 }
 
-func (s *Server) adminClients(w http.ResponseWriter, r *http.Request) {
+func (s *Server) adminClients(w http.ResponseWriter, _ *http.Request) {
 	clients, _ := s.store.ListClients()
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -79,8 +79,8 @@ func (s *Server) adminClients(w http.ResponseWriter, r *http.Request) {
 			status = `<span class="online">online</span>`
 		}
 		shares, _ := s.store.ListActiveSharesByClient(c.UniqueID)
-		sb.WriteString(fmt.Sprintf(`<tr><td><a href="/clients/c%d">c%d</a></td><td>%s</td><td>%s/%s</td><td>%s</td><td>%s</td><td>%d active</td></tr>`,
-			c.ShortID, c.ShortID, html.EscapeString(c.Hostname), c.OS, c.Arch, html.EscapeString(c.Version), status, len(shares)))
+		fmt.Fprintf(&sb, `<tr><td><a href="/clients/c%d">c%d</a></td><td>%s</td><td>%s/%s</td><td>%s</td><td>%s</td><td>%d active</td></tr>`,
+			c.ShortID, c.ShortID, html.EscapeString(c.Hostname), c.OS, c.Arch, html.EscapeString(c.Version), status, len(shares))
 	}
 
 	sb.WriteString("</table></body></html>")
@@ -118,7 +118,7 @@ func (s *Server) adminClientDetail(w http.ResponseWriter, r *http.Request, path 
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>c%d - share admin</title>
+	fmt.Fprintf(&sb, `<!DOCTYPE html><html><head><meta charset="utf-8"><title>c%d - share admin</title>
 <style>body{font-family:sans-serif;margin:2em}table{border-collapse:collapse;width:100%%}td,th{border:1px solid #ddd;padding:8px;text-align:left}th{background:#f5f5f5}.active{color:green}.offline{color:orange}.closed{color:red}.detail{color:#555;font-size:0.9em}</style>
 </head><body><h1>c%d — %s</h1>
 <p>OS: %s/%s | Version: %s</p>
@@ -126,7 +126,7 @@ func (s *Server) adminClientDetail(w http.ResponseWriter, r *http.Request, path 
 <h2>Shares</h2><table><tr><th>Name</th><th>Kind</th><th>Detail</th><th>Status</th><th>Host</th><th>Action</th></tr>`,
 		shortID, shortID, html.EscapeString(client.Hostname),
 		client.OS, client.Arch, html.EscapeString(client.Version),
-		formatTime(client.OnlineAt), formatTime(client.OfflineAt)))
+		formatTime(client.OnlineAt), formatTime(client.OfflineAt))
 
 	for _, sh := range shares {
 		fullHost := fmt.Sprintf("c%d-%s.%s", shortID, sh.ShareName, s.cfg.Domain)
@@ -147,8 +147,8 @@ func (s *Server) adminClientDetail(w http.ResponseWriter, r *http.Request, path 
 				detail += "<br><span class=\"detail\">cwd: " + html.EscapeString(sh.ProcessCwd) + "</span>"
 			}
 		}
-		sb.WriteString(fmt.Sprintf(`<tr><td>%s</td><td>%s</td><td>%s</td><td><span class="%s">%s</span></td><td><a href="https://%s">%s</a></td><td>%s</td></tr>`,
-			html.EscapeString(sh.ShareName), sh.Kind, detail, sh.Status, sh.Status, fullHost, fullHost, action))
+		fmt.Fprintf(&sb, `<tr><td>%s</td><td>%s</td><td>%s</td><td><span class="%s">%s</span></td><td><a href="https://%s">%s</a></td><td>%s</td></tr>`,
+			html.EscapeString(sh.ShareName), sh.Kind, detail, sh.Status, sh.Status, fullHost, fullHost, action)
 	}
 
 	sb.WriteString("</table><p><a href=\"/clients\">&larr; Back</a></p></body></html>")

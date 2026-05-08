@@ -183,7 +183,7 @@ func (d *Daemon) handleWSMessage(raw json.RawMessage) {
 		// fallback: look up from persisted state by share name
 		if as.State.SourceKey == "" {
 			for _, ss := range d.state.Get().Shares {
-				if ss.ShareName == sc.ShareName {
+				if ss.ShareName == sc.ShareName || strings.HasPrefix(sc.ShareName, ss.ShareName) {
 					as.State = ss
 					break
 				}
@@ -284,6 +284,9 @@ func (d *Daemon) ipcShareList() proto.IPCResponse {
 		}
 		if s.State.LocalPort != 0 {
 			item["port"] = s.State.LocalPort
+		}
+		if s.State.ProcessCwd != "" {
+			item["cwd"] = s.State.ProcessCwd
 		}
 		list = append(list, item)
 	}

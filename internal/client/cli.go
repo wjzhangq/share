@@ -86,6 +86,7 @@ func RunCLI(args []string) {
 			name, _ := m["name"].(string)
 			host, _ := m["host"].(string)
 			kind, _ := m["kind"].(string)
+			cwd, _ := m["cwd"].(string)
 			var detail string
 			switch kind {
 			case "dir":
@@ -94,7 +95,11 @@ func RunCLI(args []string) {
 				}
 			case "port":
 				if p, ok := m["port"].(float64); ok {
-					detail = fmt.Sprintf(":%d", int(p))
+					if cwd != "" {
+						detail = fmt.Sprintf("%s :%d", cwd, int(p))
+					} else {
+						detail = fmt.Sprintf(":%d", int(p))
+					}
 				}
 			}
 			if host != "" && detail != "" {
@@ -156,7 +161,7 @@ func RunCLI(args []string) {
 		sm := NewStateManager()
 		sm.Load()
 		addr := paths.IPCAddr(sm.Get().UniqueID)
-		for i := 0; i < 20; i++ {
+		for range 20 {
 			time.Sleep(100 * time.Millisecond)
 			if _, err := ipc.Dial(addr); err != nil {
 				fmt.Println("daemon stopped")
@@ -199,7 +204,7 @@ func sendToDaemon(req proto.IPCRequest) proto.IPCResponse {
 		return proto.IPCResponse{Err: fmt.Sprintf("failed to start daemon: %v", err)}
 	}
 
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		time.Sleep(200 * time.Millisecond)
 		resp, err = ipc.SendCommand(addr, req)
 		if err == nil {

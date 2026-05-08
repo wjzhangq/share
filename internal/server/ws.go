@@ -250,7 +250,7 @@ func (h *Hub) handleShareClose(ctx context.Context, cc *ConnectedClient, raw jso
 	h.writeJSON(ctx, cc.Conn, proto.ShareClosed{Type: "share.closed", ShareName: req.ShareName, Reason: "client_close"})
 }
 
-func (h *Hub) handleProcessDown(ctx context.Context, cc *ConnectedClient, raw json.RawMessage) {
+func (h *Hub) handleProcessDown(_ context.Context, cc *ConnectedClient, raw json.RawMessage) {
 	var req proto.ShareProcessDown
 	if err := json.Unmarshal(raw, &req); err != nil {
 		return
@@ -259,7 +259,7 @@ func (h *Hub) handleProcessDown(ctx context.Context, cc *ConnectedClient, raw js
 	h.srv.logger.Info("process down", "client", cc.UniqueID, "share", req.ShareName)
 }
 
-func (h *Hub) handleProcessUp(ctx context.Context, cc *ConnectedClient, raw json.RawMessage) {
+func (h *Hub) handleProcessUp(_ context.Context, cc *ConnectedClient, raw json.RawMessage) {
 	var req proto.ShareProcessUp
 	if err := json.Unmarshal(raw, &req); err != nil {
 		return
