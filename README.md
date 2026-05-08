@@ -98,7 +98,32 @@ GOOS=windows GOARCH=amd64 go build -o share-cli-windows-amd64.exe ./cmd/share-cl
 
 编译产物放入 server 配置的 `download.dir` 目录，用户即可通过 `https://share.example.com/download` 下载对应平台的 client。
 
-## 项目结构
+## Caddy 配置
+
+Server 前面需要 Caddy 做反向代理。DNS 已配置泛解析（`*.share.example.com` → 服务器 IP）。
+
+```caddyfile
+share.example.com, *.share.example.com {
+    reverse_proxy localhost:8080
+}
+```
+
+通配符域名的 TLS 证书需要 DNS 验证签发。如果使用 Cloudflare 托管域名，可以用其 DNS 插件：
+
+```bash
+xcaddy build --with github.com/caddy-dns/cloudflare
+```
+
+```caddyfile
+{
+    acme_dns cloudflare {env.CF_API_TOKEN}
+}
+
+share.example.com, *.share.example.com {
+    reverse_proxy localhost:8080
+}
+```
+
 
 ```
 share/
