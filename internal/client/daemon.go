@@ -16,6 +16,7 @@ import (
 	"github.com/wjzhangq/share/internal/client/ipc"
 	"github.com/wjzhangq/share/internal/client/paths"
 	"github.com/wjzhangq/share/internal/proto"
+	"github.com/wjzhangq/share/internal/version"
 )
 
 type Daemon struct {
@@ -61,7 +62,12 @@ func (d *Daemon) Run() error {
 	}
 
 	if st.ServerURL == "" {
-		return fmt.Errorf("server URL not configured, run: share-cli login <server-url>")
+		if version.DefaultServerURL != "" {
+			st.ServerURL = version.DefaultServerURL
+			d.state.SetServerURL(st.ServerURL)
+		} else {
+			return fmt.Errorf("server URL not configured, run: share-cli login <server-url>")
+		}
 	}
 
 	ipcAddr := paths.IPCAddr(st.UniqueID)

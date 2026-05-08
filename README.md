@@ -78,8 +78,8 @@ share-cli status
 # 构建 server
 go build -ldflags "-X github.com/wjzhangq/share/internal/version.Version=$(git describe --tags --always)" -o share-server ./cmd/share-server/
 
-# 构建 client
-go build -ldflags "-X github.com/wjzhangq/share/internal/version.Version=$(git describe --tags --always)" -o share-cli ./cmd/share-cli/
+# 构建 client（指定默认 server 地址）
+go build -ldflags "-X github.com/wjzhangq/share/internal/version.Version=$(git describe --tags --always) -X github.com/wjzhangq/share/internal/version.DefaultServerURL=wss://share.example.com/ws" -o share-cli ./cmd/share-cli/
 ```
 
 ### 交叉编译

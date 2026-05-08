@@ -13,6 +13,9 @@ import (
 )
 
 func RunCLI(args []string) {
+	var serverURL string
+	args = extractGlobalFlags(args, &serverURL)
+
 	if len(args) < 1 {
 		printUsage()
 		os.Exit(1)
@@ -25,6 +28,7 @@ func RunCLI(args []string) {
 			fmt.Fprintln(os.Stderr, "usage: share-cli dir <path>")
 			os.Exit(1)
 		}
+		ensureServerURL(serverURL)
 		resp := sendToDeamon(proto.IPCRequest{
 			Cmd:  "share.create",
 			Args: map[string]any{"kind": "dir", "path": args[1]},
@@ -40,6 +44,7 @@ func RunCLI(args []string) {
 			fmt.Fprintln(os.Stderr, "usage: share-cli port <localPort>")
 			os.Exit(1)
 		}
+		ensureServerURL(serverURL)
 		var port int
 		fmt.Sscanf(args[1], "%d", &port)
 		if port <= 0 {
@@ -82,17 +87,27 @@ func RunCLI(args []string) {
 		fmt.Printf("Status: %v\n", resp.Data)
 
 	case "login":
-		if len(args) < 2 {
+		url := serverURL
+		if len(args) >= 2 {
+			url = args[1]
+		}
+		if url == "" {
+			url = version.DefaultServerURL
+		}
+		if url == "" {
 			fmt.Fprintln(os.Stderr, "usage: share-cli login <server-url>")
 			os.Exit(1)
 		}
 		sm := NewStateManager()
 		sm.Load()
-		sm.SetServerURL(args[1])
-		fmt.Printf("Server URL set to: %s\n", args[1])
+		sm.SetServerURL(url)
+		fmt.Printf("Server URL set to: %s\n", url)
 
 	case "version":
 		fmt.Printf("share-cli %s\n", version.Version)
+		if version.DefaultServerURL != "" {
+			fmt.Printf("default server: %s\n", version.DefaultServerURL)
+		}
 
 	case "daemon":
 		// handled in main
@@ -138,6 +153,31 @@ func sendToDeamon(req proto.IPCRequest) proto.IPCResponse {
 	return proto.IPCResponse{Err: "daemon did not start in time"}
 }
 
+func extractGlobalFlags(args []string, serverURL *string) []string {
+	var remaining []string
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--url" && i+1 < len(args) {
+			*serverURL = args[i+1]
+			i++
+		} else {
+			remaining = append(remaining, args[i])
+		}
+	}
+	return remaining
+}
+
+func ensureServerURL(urlOverride string) {
+	if urlOverride == "" {
+		return
+	}
+	sm := NewStateManager()
+	sm.Load()
+	st := sm.Get()
+	if st.ServerURL != urlOverride {
+		sm.SetServerURL(urlOverride)
+	}
+}
+
 func parseCloseArgs(args []string) map[string]any {
 	if len(args) > 0 && args[0] == "--all" {
 		return map[string]any{"all": true}
@@ -152,13 +192,19 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, `share-cli - share local resources to the internet
 
 Usage:
-  share-cli dir <path>           Share a directory
-  share-cli port <localPort>     Share a local HTTP port
-  share-cli ls                   List all shares
-  share-cli close <share-name>   Close a share
-  share-cli close --all          Close all shares
-  share-cli status               Show daemon status
-  share-cli login <server-url>   Set server URL
-  share-cli version              Print version
+  share-cli [--url <server-url>] <command> [args]
+
+Commands:
+  dir <path>           Share a directory
+  port <localPort>     Share a local HTTP port
+  ls                   List all shares
+  close <share-name>   Close a share
+  close --all          Close all shares
+  status               Show daemon status
+  login [server-url]   Set server URL (uses default if omitted)
+  version              Print version
+
+Global Flags:
+  --url <server-url>   Override server URL for this session
 `)
 }
