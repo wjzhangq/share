@@ -15,12 +15,17 @@ import (
 )
 
 type Config struct {
-	Listen  string       `yaml:"listen"`
-	Domain  string       `yaml:"domain"`
-	DB      DBConfig     `yaml:"db"`
-	Admin   AdminConfig  `yaml:"admin"`
-	Forward ForwardConfig `yaml:"forward"`
-	Log     LogConfig    `yaml:"log"`
+	Listen   string         `yaml:"listen"`
+	Domain   string         `yaml:"domain"`
+	DB       DBConfig       `yaml:"db"`
+	Admin    AdminConfig    `yaml:"admin"`
+	Forward  ForwardConfig  `yaml:"forward"`
+	Download DownloadConfig `yaml:"download"`
+	Log      LogConfig      `yaml:"log"`
+}
+
+type DownloadConfig struct {
+	Dir string `yaml:"dir"`
 }
 
 type DBConfig struct {
@@ -183,6 +188,10 @@ func (s *Server) rootHandler(w http.ResponseWriter, r *http.Request) {
 	case hostKindMain:
 		if r.URL.Path == "/ws" {
 			s.hub.HandleWS(w, r)
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/download") {
+			s.handleDownload(w, r)
 			return
 		}
 		http.NotFound(w, r)

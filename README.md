@@ -26,6 +26,8 @@ db:
 admin:
   user: "admin"
   password: "your-strong-password"
+download:
+  dir: "/var/lib/share/downloads"
 EOF
 
 # 启动（默认读取当前目录 config.yaml）
@@ -67,6 +69,7 @@ share-cli status
 - **进程监控**: 端口共享自动检测进程退出/重启，状态实时同步
 - **断线重连**: Client 指数退避自动重连，share 自动恢复
 - **管理后台**: `admin.<domain>` 查看所有 client 和 share 状态
+- **Client 下载**: `<domain>/download` 提供各平台 client 二进制文件下载
 - **跨平台**: Windows / macOS / Linux 全平台支持
 
 ## 构建
@@ -86,6 +89,8 @@ GOOS=linux GOARCH=amd64 go build -o share-cli-linux-amd64 ./cmd/share-cli/
 GOOS=darwin GOARCH=arm64 go build -o share-cli-darwin-arm64 ./cmd/share-cli/
 GOOS=windows GOARCH=amd64 go build -o share-cli-windows-amd64.exe ./cmd/share-cli/
 ```
+
+编译产物放入 server 配置的 `download.dir` 目录，用户即可通过 `https://share.example.com/download` 下载对应平台的 client。
 
 ## 项目结构
 
