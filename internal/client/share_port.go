@@ -147,6 +147,14 @@ func (d *Daemon) handleForwardReq(fr proto.ForwardReq) {
 
 	resp, err := d.httpCli.Do(localReq)
 	if err != nil {
+		if !procmon.IsPortListening(localPort) {
+			d.ws.SendJSON(d.ctx, proto.ShareProcessDown{
+				Type:      "share.process_down",
+				ShareName: fr.ShareName,
+				ExitAt:    time.Now().Unix(),
+			})
+			d.logger.Info("port down detected on forward failure", "share", fr.ShareName, "port", localPort)
+		}
 		d.sendErrorResp(fr.ReqID, fr.ShareName, 502, "upstream error")
 		return
 	}

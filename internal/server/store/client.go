@@ -35,7 +35,7 @@ func (s *Store) RegisterClient(uniqueID, hostname, os, arch, version, lastIP str
 	defer s.mu.Unlock()
 
 	var c Client
-	err := s.db.QueryRow("SELECT unique_id, short_id, hostname, os, arch, version, COALESCE(last_ip,''), online, online_at, offline_at FROM clients WHERE unique_id = ?", uniqueID).
+	err := s.db.QueryRow("SELECT unique_id, short_id, hostname, os, arch, version, COALESCE(last_ip,''), online, COALESCE(online_at,0), COALESCE(offline_at,0) FROM clients WHERE unique_id = ?", uniqueID).
 		Scan(&c.UniqueID, &c.ShortID, &c.Hostname, &c.OS, &c.Arch, &c.Version, &c.LastIP, &c.Online, &c.OnlineAt, &c.OfflineAt)
 	if err == nil {
 		now := time.Now().Unix()
