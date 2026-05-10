@@ -34,8 +34,8 @@ func (s *Store) migrate() error {
 	if _, err := s.db.Exec(schema); err != nil {
 		return err
 	}
-	// add process_cwd column if it doesn't exist (migration for existing DBs)
 	_, _ = s.db.Exec(`ALTER TABLE shares ADD COLUMN process_cwd TEXT`)
+	_, _ = s.db.Exec(`ALTER TABLE clients ADD COLUMN last_ip TEXT`)
 	return nil
 }
 

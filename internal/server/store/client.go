@@ -12,6 +12,7 @@ type Client struct {
 	OS        string
 	Arch      string
 	Version   string
+	LastIP    string
 	Online    bool
 	OnlineAt  int64
 	OfflineAt int64
@@ -29,17 +30,17 @@ func (s *Store) nextShortID() (int64, error) {
 	return maxID.Int64 + 1, nil
 }
 
-func (s *Store) RegisterClient(uniqueID, hostname, os, arch, version string) (*Client, error) {
+func (s *Store) RegisterClient(uniqueID, hostname, os, arch, version, lastIP string) (*Client, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	var c Client
-	err := s.db.QueryRow("SELECT unique_id, short_id, hostname, os, arch, version, online, online_at, offline_at FROM clients WHERE unique_id = ?", uniqueID).
-		Scan(&c.UniqueID, &c.ShortID, &c.Hostname, &c.OS, &c.Arch, &c.Version, &c.Online, &c.OnlineAt, &c.OfflineAt)
+	err := s.db.QueryRow("SELECT unique_id, short_id, hostname, os, arch, version, COALESCE(last_ip,''), online, online_at, offline_at FROM clients WHERE unique_id = ?", uniqueID).
+		Scan(&c.UniqueID, &c.ShortID, &c.Hostname, &c.OS, &c.Arch, &c.Version, &c.LastIP, &c.Online, &c.OnlineAt, &c.OfflineAt)
 	if err == nil {
 		now := time.Now().Unix()
-		_, err = s.db.Exec("UPDATE clients SET hostname=?, os=?, arch=?, version=?, online=1, online_at=? WHERE unique_id=?",
-			hostname, os, arch, version, now, uniqueID)
+		_, err = s.db.Exec("UPDATE clients SET hostname=?, os=?, arch=?, version=?, last_ip=?, online=1, online_at=? WHERE unique_id=?",
+			hostname, os, arch, version, lastIP, now, uniqueID)
 		if err != nil {
 			return nil, err
 		}
@@ -47,6 +48,7 @@ func (s *Store) RegisterClient(uniqueID, hostname, os, arch, version string) (*C
 		c.OS = os
 		c.Arch = arch
 		c.Version = version
+		c.LastIP = lastIP
 		c.Online = true
 		c.OnlineAt = now
 		return &c, nil
@@ -60,8 +62,8 @@ func (s *Store) RegisterClient(uniqueID, hostname, os, arch, version string) (*C
 		return nil, err
 	}
 	now := time.Now().Unix()
-	_, err = s.db.Exec("INSERT INTO clients (unique_id, short_id, hostname, os, arch, version, online, online_at) VALUES (?,?,?,?,?,?,1,?)",
-		uniqueID, shortID, hostname, os, arch, version, now)
+	_, err = s.db.Exec("INSERT INTO clients (unique_id, short_id, hostname, os, arch, version, last_ip, online, online_at) VALUES (?,?,?,?,?,?,?,1,?)",
+		uniqueID, shortID, hostname, os, arch, version, lastIP, now)
 	if err != nil {
 		return nil, err
 	}
@@ -72,6 +74,7 @@ func (s *Store) RegisterClient(uniqueID, hostname, os, arch, version string) (*C
 		OS:       os,
 		Arch:     arch,
 		Version:  version,
+		LastIP:   lastIP,
 		Online:   true,
 		OnlineAt: now,
 	}, nil
@@ -90,8 +93,8 @@ func (s *Store) GetClientByShortID(shortID int64) (*Client, error) {
 	defer s.mu.RUnlock()
 	var c Client
 	var online int
-	err := s.db.QueryRow("SELECT unique_id, short_id, hostname, os, arch, version, online, COALESCE(online_at,0), COALESCE(offline_at,0) FROM clients WHERE short_id=?", shortID).
-		Scan(&c.UniqueID, &c.ShortID, &c.Hostname, &c.OS, &c.Arch, &c.Version, &online, &c.OnlineAt, &c.OfflineAt)
+	err := s.db.QueryRow("SELECT unique_id, short_id, hostname, os, arch, version, COALESCE(last_ip,''), online, COALESCE(online_at,0), COALESCE(offline_at,0) FROM clients WHERE short_id=?", shortID).
+		Scan(&c.UniqueID, &c.ShortID, &c.Hostname, &c.OS, &c.Arch, &c.Version, &c.LastIP, &online, &c.OnlineAt, &c.OfflineAt)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +105,7 @@ func (s *Store) GetClientByShortID(shortID int64) (*Client, error) {
 func (s *Store) ListClients() ([]Client, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	rows, err := s.db.Query("SELECT unique_id, short_id, hostname, os, arch, version, online, COALESCE(online_at,0), COALESCE(offline_at,0) FROM clients ORDER BY short_id")
+	rows, err := s.db.Query("SELECT unique_id, short_id, hostname, os, arch, version, COALESCE(last_ip,''), online, COALESCE(online_at,0), COALESCE(offline_at,0) FROM clients ORDER BY short_id")
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +114,7 @@ func (s *Store) ListClients() ([]Client, error) {
 	for rows.Next() {
 		var c Client
 		var online int
-		if err := rows.Scan(&c.UniqueID, &c.ShortID, &c.Hostname, &c.OS, &c.Arch, &c.Version, &online, &c.OnlineAt, &c.OfflineAt); err != nil {
+		if err := rows.Scan(&c.UniqueID, &c.ShortID, &c.Hostname, &c.OS, &c.Arch, &c.Version, &c.LastIP, &online, &c.OnlineAt, &c.OfflineAt); err != nil {
 			return nil, err
 		}
 		c.Online = online == 1

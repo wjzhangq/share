@@ -136,6 +136,9 @@ func (d *Daemon) restoreShares() {
 	st := d.state.Get()
 	for _, s := range st.Shares {
 		d.createShare(s)
+		if s.Kind == "port" && s.LocalPort > 0 {
+			go d.watchProcess(s.ShareName, s.LocalPort)
+		}
 	}
 }
 
@@ -148,6 +151,7 @@ func (d *Daemon) createShare(s ShareState) {
 		LocalPath:  s.LocalPath,
 		LocalPort:  s.LocalPort,
 		ProcessExe: s.ProcessExe,
+		ProcessCwd: s.ProcessCwd,
 	}
 	d.ws.SendJSON(d.ctx, msg)
 }

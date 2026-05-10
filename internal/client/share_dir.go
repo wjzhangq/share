@@ -59,10 +59,6 @@ func dirHintName(absPath string) string {
 }
 
 func dirSourceKey(absPath string) string {
-	gitRemote := getGitRemoteURL(absPath)
-	if gitRemote != "" {
-		return "git:" + gitRemote
-	}
 	return "path:" + absPath
 }
 

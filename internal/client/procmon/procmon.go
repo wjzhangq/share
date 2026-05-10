@@ -2,9 +2,6 @@ package procmon
 
 import (
 	"fmt"
-	"os/exec"
-	"runtime"
-	"strings"
 
 	"github.com/shirou/gopsutil/v3/net"
 	"github.com/shirou/gopsutil/v3/process"
@@ -45,7 +42,7 @@ func FindListeningProcess(port int) (*ProcessInfo, error) {
 		if err != nil {
 			continue
 		}
-		cwd := getCwd(c.Pid)
+		cwd, _ := p.Cwd()
 
 		if result != nil && result.PID != c.Pid {
 			return nil, fmt.Errorf("multiple processes listening on port %d", port)
@@ -57,25 +54,6 @@ func FindListeningProcess(port int) (*ProcessInfo, error) {
 		return nil, fmt.Errorf("no process listening on port %d", port)
 	}
 	return result, nil
-}
-
-func getCwd(pid int32) string {
-	if runtime.GOOS == "darwin" {
-		out, err := exec.Command("lsof", "-p", fmt.Sprintf("%d", pid), "-a", "-d", "cwd", "-Fn").Output()
-		if err == nil {
-			for _, line := range strings.Split(string(out), "\n") {
-				if strings.HasPrefix(line, "n") {
-					return line[1:]
-				}
-			}
-		}
-	}
-	p, err := process.NewProcess(pid)
-	if err != nil {
-		return ""
-	}
-	cwd, _ := p.Cwd()
-	return cwd
 }
 
 func IsProcessAlive(pid int32, expectedExe string) bool {
@@ -90,13 +68,13 @@ func IsProcessAlive(pid int32, expectedExe string) bool {
 	return exe == expectedExe
 }
 
-func IsListening(pid int32, port int) bool {
+func IsPortListening(port int) bool {
 	conns, err := net.Connections("tcp")
 	if err != nil {
 		return false
 	}
 	for _, c := range conns {
-		if c.Pid == pid && c.Laddr.Port == uint32(port) && c.Status == "LISTEN" {
+		if c.Laddr.Port == uint32(port) && c.Status == "LISTEN" {
 			return true
 		}
 	}

@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"strconv"
@@ -87,7 +88,7 @@ func (f *Forwarder) handlePublicRequest(w http.ResponseWriter, r *http.Request, 
 			f.srv.logger.Info("req end", "path", r.URL.Path, "status", 404, "reason", "client not found", "duration", time.Since(start))
 			return
 		}
-		f.writeOfflinePage(w, cl.Hostname, fmt.Sprintf("c%d", hi.shortID), hi.shareName, "client offline")
+		f.writeOfflinePage(w, cl, nil, "client offline")
 		f.srv.logger.Info("req end", "path", r.URL.Path, "status", 503, "reason", "client offline", "duration", time.Since(start))
 		return
 	}
@@ -104,7 +105,8 @@ func (f *Forwarder) handlePublicRequest(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	if share.Status == "offline" {
-		f.writeOfflinePage(w, "", fmt.Sprintf("c%d", hi.shortID), hi.shareName, "offline (process exited)")
+		cl, _ := f.srv.store.GetClientByShortID(hi.shortID)
+		f.writeOfflinePage(w, cl, share, "process exited")
 		f.srv.logger.Info("req end", "path", r.URL.Path, "status", 503, "reason", "process offline", "duration", time.Since(start))
 		return
 	}
@@ -608,10 +610,66 @@ func (f *Forwarder) handleDirListResp(w http.ResponseWriter, r *http.Request, pr
 	w.WriteHeader(http.StatusOK)
 }
 
-func (f *Forwarder) writeOfflinePage(w http.ResponseWriter, hostname, clientLabel, shareName, reason string) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+func (f *Forwarder) writeOfflinePage(w http.ResponseWriter, cl *store.Client, sh *store.Share, reason string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusServiceUnavailable)
-	fmt.Fprintf(w, "client: %s (%s)\nshare : %s\nstatus: %s\n", clientLabel, hostname, shareName, reason)
+
+	hostname := "unknown"
+	clientLabel := "unknown"
+	lastIP := ""
+	offlineAt := ""
+	if cl != nil {
+		hostname = html.EscapeString(cl.Hostname)
+		clientLabel = fmt.Sprintf("c%d", cl.ShortID)
+		lastIP = cl.LastIP
+		if cl.OfflineAt > 0 {
+			offlineAt = time.Unix(cl.OfflineAt, 0).UTC().Format("2006-01-02 15:04:05 UTC")
+		}
+	}
+
+	var shareDetail string
+	if sh != nil {
+		switch sh.Kind {
+		case "dir":
+			shareDetail = html.EscapeString(sh.LocalPath)
+		case "port":
+			shareDetail = fmt.Sprintf(":%d", sh.LocalPort)
+			if sh.ProcessCwd != "" {
+				shareDetail += " &nbsp;·&nbsp; " + html.EscapeString(sh.ProcessCwd)
+			}
+		}
+	}
+
+	fmt.Fprintf(w, `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Share Offline</title>
+<style>
+body{font-family:sans-serif;margin:0;background:#f5f5f5;display:flex;align-items:center;justify-content:center;min-height:100vh}
+.card{background:#fff;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.12);padding:2em 2.5em;max-width:480px;width:100%%}
+h2{margin:0 0 .5em;color:#c0392b}
+.row{margin:.4em 0;color:#555;font-size:.95em}
+.label{display:inline-block;width:7em;color:#888}
+.reason{margin-top:1.2em;padding:.6em 1em;background:#fef9e7;border-left:4px solid #f39c12;font-size:.9em;color:#7d6608}
+</style>
+</head><body><div class="card">
+<h2>Share Unavailable</h2>
+<div class="row"><span class="label">Client</span>%s (%s)</div>`,
+		clientLabel, hostname)
+
+	if lastIP != "" {
+		fmt.Fprintf(w, `<div class="row"><span class="label">Last IP</span>%s</div>`, html.EscapeString(lastIP))
+	}
+	if offlineAt != "" {
+		fmt.Fprintf(w, `<div class="row"><span class="label">Offline at</span>%s</div>`, offlineAt)
+	}
+	if sh != nil {
+		fmt.Fprintf(w, `<div class="row"><span class="label">Share</span>%s (%s)</div>`, html.EscapeString(sh.ShareName), sh.Kind)
+		if shareDetail != "" {
+			fmt.Fprintf(w, `<div class="row"><span class="label">Detail</span>%s</div>`, shareDetail)
+		}
+	}
+
+	fmt.Fprintf(w, `<div class="reason">%s</div>
+</div></body></html>`, html.EscapeString(reason))
 }
 
 func isDir(path string) bool {

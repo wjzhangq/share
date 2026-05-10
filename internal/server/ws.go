@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -74,7 +75,7 @@ func (h *Hub) HandleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client, err := h.srv.store.RegisterClient(hello.UniqueID, hello.Hostname, hello.OS, hello.Arch, hello.Version)
+	client, err := h.srv.store.RegisterClient(hello.UniqueID, hello.Hostname, hello.OS, hello.Arch, hello.Version, clientIP(r))
 	if err != nil {
 		h.srv.logger.Error("register client", "err", err)
 		conn.Close(websocket.StatusInternalError, "register failed")
@@ -296,5 +297,27 @@ func (h *Hub) writeJSON(ctx context.Context, conn *websocket.Conn, v any) error 
 	writeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	return conn.Write(writeCtx, websocket.MessageText, data)
+}
+
+func clientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		// take only the first (original client) address
+		if idx := len(xff); idx > 0 {
+			for i := 0; i < len(xff); i++ {
+				if xff[i] == ',' {
+					return strings.TrimSpace(xff[:i])
+				}
+			}
+		}
+		return strings.TrimSpace(xff)
+	}
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		return strings.TrimSpace(xri)
+	}
+	host := r.RemoteAddr
+	if idx := strings.LastIndex(host, ":"); idx != -1 {
+		return host[:idx]
+	}
+	return host
 }
 

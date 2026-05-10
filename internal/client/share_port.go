@@ -44,7 +44,7 @@ func (d *Daemon) sharePort(port int) proto.IPCResponse {
 		ProcessCwd: proc.Cwd,
 	}
 
-	go d.watchProcess(hintName, proc.PID, proc.Exe, port)
+	go d.watchProcess(hintName, port)
 
 	sc, ok := d.waitShareCreated(ss, func() { d.ws.SendJSON(d.ctx, msg) })
 	if !ok {
@@ -64,11 +64,12 @@ func (d *Daemon) sharePort(port int) proto.IPCResponse {
 	}}
 }
 
-func (d *Daemon) watchProcess(shareName string, pid int32, exe string, port int) {
+func (d *Daemon) watchProcess(shareName string, port int) {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
-	alive := true
+	alive := procmon.IsPortListening(port)
+
 	for {
 		select {
 		case <-d.ctx.Done():
@@ -83,29 +84,29 @@ func (d *Daemon) watchProcess(shareName string, pid int32, exe string, port int)
 			return
 		}
 
-		if alive {
-			if !procmon.IsProcessAlive(pid, exe) || !procmon.IsListening(pid, port) {
-				alive = false
-				d.ws.SendJSON(d.ctx, proto.ShareProcessDown{
-					Type:      "share.process_down",
-					ShareName: shareName,
-					ExitAt:    time.Now().Unix(),
-				})
-				d.logger.Info("process down", "share", shareName, "pid", pid)
+		nowAlive := procmon.IsPortListening(port)
+		if alive && !nowAlive {
+			alive = false
+			d.ws.SendJSON(d.ctx, proto.ShareProcessDown{
+				Type:      "share.process_down",
+				ShareName: shareName,
+				ExitAt:    time.Now().Unix(),
+			})
+			d.logger.Info("port down", "share", shareName, "port", port)
+		} else if !alive && nowAlive {
+			alive = true
+			proc, err := procmon.FindListeningProcess(port)
+			newPID := 0
+			if err == nil {
+				newPID = int(proc.PID)
 			}
-		} else {
-			newProc, err := procmon.FindListeningProcess(port)
-			if err == nil && newProc.Exe == exe {
-				alive = true
-				pid = newProc.PID
-				d.ws.SendJSON(d.ctx, proto.ShareProcessUp{
-					Type:      "share.process_up",
-					ShareName: shareName,
-					NewPID:    int(newProc.PID),
-					LocalPort: port,
-				})
-				d.logger.Info("process up", "share", shareName, "pid", newProc.PID)
-			}
+			d.ws.SendJSON(d.ctx, proto.ShareProcessUp{
+				Type:      "share.process_up",
+				ShareName: shareName,
+				NewPID:    newPID,
+				LocalPort: port,
+			})
+			d.logger.Info("port up", "share", shareName, "port", port, "pid", newPID)
 		}
 	}
 }
