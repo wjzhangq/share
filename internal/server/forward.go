@@ -7,6 +7,7 @@ import (
 	"html"
 	"io"
 	"net/http"
+	"path"
 	"strconv"
 	"sync"
 	"time"
@@ -158,10 +159,11 @@ func (f *Forwarder) handleHTTPForward(w http.ResponseWriter, r *http.Request, hi
 
 	var fwdMsg any
 	if share.Kind == "dir" {
+		cleanPath := path.Clean("/" + r.URL.Path)
 		if isDir(r.URL.Path) {
-			fwdMsg = proto.DirList{Type: "dir.list", ReqID: reqID, ShareName: hi.shareName, RelPath: r.URL.Path}
+			fwdMsg = proto.DirList{Type: "dir.list", ReqID: reqID, ShareName: hi.shareName, RelPath: cleanPath}
 		} else {
-			fwdMsg = proto.DirRead{Type: "dir.read", ReqID: reqID, ShareName: hi.shareName, RelPath: r.URL.Path, Range: r.Header.Get("Range")}
+			fwdMsg = proto.DirRead{Type: "dir.read", ReqID: reqID, ShareName: hi.shareName, RelPath: cleanPath, Range: r.Header.Get("Range")}
 		}
 	} else {
 		fwdMsg = proto.ForwardReq{

@@ -9,6 +9,7 @@ import (
 	"mime"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -118,7 +119,7 @@ func (d *Daemon) handleDirList(dl proto.DirList) {
 	}
 
 	localPath := share.State.LocalPath
-	targetPath := filepath.Join(localPath, filepath.FromSlash(dl.RelPath))
+	targetPath := filepath.Join(localPath, filepath.FromSlash(path.Clean("/"+dl.RelPath)))
 
 	if !isPathSafe(localPath, targetPath) {
 		d.sendDirListResp(dl.ReqID, nil, false, false)
@@ -173,7 +174,7 @@ func (d *Daemon) handleDirRead(dr proto.DirRead) {
 	}
 
 	localPath := share.State.LocalPath
-	targetPath := filepath.Join(localPath, filepath.FromSlash(dr.RelPath))
+	targetPath := filepath.Join(localPath, filepath.FromSlash(path.Clean("/"+dr.RelPath)))
 
 	if !isPathSafe(localPath, targetPath) {
 		d.sendErrorResp(dr.ReqID, dr.ShareName, 403, "forbidden")
